@@ -44,6 +44,7 @@ use crate::{
         document::{Code, Direction, Document, DocumentFlag, TagType, Tagger, TapSide},
         meter::{FlowMeter, Meter, UsageMeter},
     },
+    proto::common::TridentType,
     rpc::get_timestamp,
     sender::SendItem,
     utils::stats::{
@@ -326,6 +327,22 @@ impl Stash {
         }
     }
 
+    fn get_directions(
+        &self,
+        flow: &Flow,
+        trident_type: TridentType,
+        cloud_gateway_traffic: bool,
+    ) -> ([Direction; 2], bool) {
+        let (src, dst, is_extra_tracing_doc) =
+            get_direction(flow, trident_type, cloud_gateway_traffic);
+        match flow.flow_key.tap_type {
+            TapType::Idc(_) if src != Direction::None && dst != Direction::None => {
+                ([Direction::None, Direction::None], is_extra_tracing_doc)
+            }
+            _ => ([src, dst], is_extra_tracing_doc),
+        }
+    }
+
     fn collect(&mut self, acc_flow: Option<AccumulatedFlow>, mut time_in_second: u64) {
         if time_in_second < self.start_time.as_secs() {
             self.counter
@@ -430,12 +447,11 @@ impl Stash {
         }
 
         // 全景图统计
-        let (src, dst, is_extra_tracing_doc) = get_direction(
+        let (directions, is_extra_tracing_doc) = self.get_directions(
             flow,
             self.context.config.load().trident_type,
             self.context.config.load().cloud_gateway_traffic,
         );
-        let directions = [src, dst];
 
         self.fill_stats(&acc_flow, directions, false, inactive_ip_enabled);
         self.fill_tracing_stats(
@@ -494,10 +510,7 @@ impl Stash {
         }
         let flow = &acc_flow.tagged_flow.flow;
         // 双端统计量：若双端direction都未知，则以direction=0（对应tap-side=rest）记录一次统计数据
-        if flow.flow_key.tap_type == TapType::Cloud
-            && directions[0] == Direction::None
-            && directions[1] == Direction::None
-        {
+        if directions[0] == Direction::None && directions[1] == Direction::None {
             self.fill_edge_stats(
                 acc_flow,
                 Direction::None,
