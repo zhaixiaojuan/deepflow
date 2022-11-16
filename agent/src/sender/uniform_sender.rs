@@ -33,6 +33,7 @@ use super::{SendItem, SendMessageType, PRE_FILE_SUFFIX};
 use crate::config::handler::SenderAccess;
 use crate::exception::ExceptionHandler;
 use crate::proto::trident::{Exception, SocketType};
+use crate::sender::SendMessageType::PacketSequenceBlock;
 use crate::utils::stats::{
     Collector, Countable, Counter, CounterType, CounterValue, RefCountable, StatsOption,
 };
@@ -133,9 +134,21 @@ impl Encoder {
         // Reserve 4 bytes pb length
         let offset = self.buffer.len();
         self.buffer.extend_from_slice([0u8; 4].as_slice());
+        let ms_type = s.message_type();
         match s.encode(&mut self.buffer) {
-            Ok(size) => self.buffer[offset..offset + 4]
-                .copy_from_slice((size as u32).to_le_bytes().as_slice()),
+            Ok(size) => {
+                if size <= 0 {
+                    error!("size: {}", size);
+                }
+                self.buffer[offset..offset + 4]
+                    .copy_from_slice((size as u32).to_le_bytes().as_slice());
+                match ms_type {
+                    PacketSequenceBlock => {
+                        info!("size: {}", size);
+                    },
+                    _ => {}
+                }
+            }
             Err(e) => debug!("encode failed {}", e),
         };
     }
