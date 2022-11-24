@@ -17,7 +17,6 @@
 use std::{
     collections::HashMap,
     io::prelude::*,
-    mem,
     ops::Deref,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -28,10 +27,11 @@ use std::{
 };
 
 use arc_swap::access::Access;
-use flate2::{write::ZlibEncoder, Compression};
+use flate2::write::ZlibEncoder;
+use flate2::Compression;
 use k8s_openapi::apimachinery::pkg::version::Info;
 use kube::{Client, Config};
-use log::{debug, error, info, log_enabled, warn, Level};
+use log::{debug, error, info, warn};
 use sysinfo::{System, SystemExt};
 use tokio::{
     runtime::{Builder, Runtime},
@@ -118,10 +118,10 @@ impl ApiWatcher {
         exception_handler: ExceptionHandler,
     ) -> Self {
         // worker_threads = min(min(3 * CPU_CORE + 0, THREAD_THRESHOLD), RESOURCES.len())
-        let mut sys = System::new();
-        sys.refresh_cpu();
-        let worker_threads = 1
-            .max(sys.cpus().len() * 3)
+        let worker_threads = System::new()
+            .physical_core_count()
+            .map(|c| c * 3)
+            .unwrap_or(RESOURCES.len())
             .min(config.load().thread_threshold as usize)
             .min(RESOURCES.len());
 
@@ -162,7 +162,13 @@ impl ApiWatcher {
             .lock()
             .unwrap()
             .get(resource_name.as_ref())
-            .map(|watcher| watcher.entries())
+            .map(|watcher| {
+                watcher
+                    .entries()
+                    .into_iter()
+                    .map(|c| c.into_bytes())
+                    .collect()
+            })
     }
 
     pub fn get_server_version(&self) -> Option<String> {
@@ -451,22 +457,6 @@ impl ApiWatcher {
         }
     }
 
-    fn debug_k8s_request(request: &KubernetesApiSyncRequest, full_sync: bool) {
-        let mut map = HashMap::new();
-        for entry in request.entries.iter() {
-            *map.entry(entry.r#type().to_string()).or_insert(0) += 1;
-        }
-        let resource_summary = map
-            .into_iter()
-            .map(|(k, v)| format!("resource: {} len: {}", k, v))
-            .collect::<Vec<_>>();
-        if full_sync {
-            debug!("full sync: {:?}", resource_summary);
-        } else {
-            debug!("incremental sync {:?}", resource_summary);
-        }
-    }
-
     fn process(
         context: &Arc<Context>,
         apiserver_version: &Arc<Mutex<Info>>,
@@ -474,6 +464,7 @@ impl ApiWatcher {
         err_msgs: &Arc<Mutex<Vec<String>>>,
         watcher_versions: &mut HashMap<String, u64>,
         resource_watchers: &Arc<Mutex<HashMap<String, GenericResourceWatcher>>>,
+        encoder: &mut ZlibEncoder<Vec<u8>>,
         exception_handler: &ExceptionHandler,
     ) {
         let version = &context.version;
@@ -504,20 +495,17 @@ impl ApiWatcher {
             info!("version updated to {}", version.load(Ordering::SeqCst));
             pb_version = Some(version.load(Ordering::SeqCst));
             if let Some(i) =
-                Self::parse_apiserver_version(apiserver_version.lock().unwrap().deref())
+                Self::parse_apiserver_version(encoder, apiserver_version.lock().unwrap().deref())
             {
                 total_entries.push(i);
             }
             let resource_watchers_guard = resource_watchers.lock().unwrap();
             for watcher in resource_watchers_guard.values() {
-                let kind = watcher.kind();
-                for entry in watcher.entries() {
-                    total_entries.push(KubernetesApiInfo {
-                        r#type: Some(kind.clone()),
-                        compressed_info: Some(entry),
-                        info: None,
-                    });
-                }
+                total_entries.append(&mut Self::pb_entries(
+                    encoder,
+                    watcher.entries(),
+                    watcher.kind(),
+                ));
             }
         }
         let mut msg = {
@@ -540,10 +528,6 @@ impl ApiWatcher {
             }
         };
 
-        if log_enabled!(Level::Debug) {
-            Self::debug_k8s_request(&msg, false);
-        }
-
         match context
             .runtime
             .block_on(session.grpc_kubernetes_api_sync_with_statsd(msg.clone()))
@@ -561,7 +545,7 @@ impl ApiWatcher {
                 }
             }
             Err(e) => {
-                let err = format!("kubernetes_api_sync grpc call failed: {}", e);
+                let err = format!("KubernetesAPISync failed: {}", e);
                 exception_handler.set(Exception::ControllerSocketError);
                 error!("{}", err);
                 err_msgs.lock().unwrap().push(err);
@@ -572,50 +556,68 @@ impl ApiWatcher {
         // 发送一次全量
         let mut total_entries = vec![];
 
-        if let Some(i) = Self::parse_apiserver_version(apiserver_version.lock().unwrap().deref()) {
+        if let Some(i) =
+            Self::parse_apiserver_version(encoder, apiserver_version.lock().unwrap().deref())
+        {
             total_entries.push(i);
         }
         let resource_watchers_guard = resource_watchers.lock().unwrap();
         for watcher in resource_watchers_guard.values() {
-            let kind = watcher.kind();
-            for entry in watcher.entries() {
-                total_entries.push(KubernetesApiInfo {
-                    r#type: Some(kind.clone()),
-                    compressed_info: Some(entry),
-                    info: None,
-                });
-            }
+            total_entries.append(&mut Self::pb_entries(
+                encoder,
+                watcher.entries(),
+                watcher.kind(),
+            ));
         }
         drop(resource_watchers_guard);
 
         msg.entries = total_entries;
 
-        if log_enabled!(Level::Debug) {
-            Self::debug_k8s_request(&msg, true);
-        }
-
         if let Err(e) = context
             .runtime
             .block_on(session.grpc_kubernetes_api_sync_with_statsd(msg))
         {
-            let err = format!("kubernetes_api_sync grpc call failed: {}", e);
+            let err = format!("KubernetesAPISync failed: {}", e);
             exception_handler.set(Exception::ControllerSocketError);
             error!("{}", err);
             err_msgs.lock().unwrap().push(err);
         }
     }
 
-    fn parse_apiserver_version(info: &Info) -> Option<KubernetesApiInfo> {
-        serde_json::to_vec(info).ok().map(|info| KubernetesApiInfo {
-            //FIXME：没找到好方法拿到 Info 的 type,先写死
-            r#type: Some(PB_VERSION_INFO.to_string()),
-            compressed_info: {
-                let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-                encoder.write_all(info.as_slice()).unwrap();
-                encoder.reset(vec![]).ok()
-            },
-            info: None,
-        })
+    fn parse_apiserver_version(
+        encoder: &mut ZlibEncoder<Vec<u8>>,
+        info: &Info,
+    ) -> Option<KubernetesApiInfo> {
+        serde_json::to_string(info)
+            .ok()
+            .map(|info| KubernetesApiInfo {
+                //FIXME：没找到好方法拿到 Info 的 type,先写死
+                r#type: Some(PB_VERSION_INFO.to_string()),
+                compressed_info: {
+                    encoder.write_all(info.as_bytes()).unwrap();
+                    encoder.reset(vec![]).ok()
+                },
+
+                info: None,
+            })
+    }
+
+    fn pb_entries(
+        encoder: &mut ZlibEncoder<Vec<u8>>,
+        entries: Vec<String>,
+        kind: String,
+    ) -> Vec<KubernetesApiInfo> {
+        entries
+            .into_iter()
+            .map(|entry| KubernetesApiInfo {
+                r#type: Some(kind.clone()),
+                compressed_info: {
+                    encoder.write_all(entry.as_bytes()).unwrap();
+                    encoder.reset(vec![]).ok()
+                },
+                info: None,
+            })
+            .collect::<Vec<_>>()
     }
 
     fn run(
@@ -657,7 +659,7 @@ impl ApiWatcher {
                         .runtime
                         .block_on(session.grpc_kubernetes_api_sync_with_statsd(msg))
                     {
-                        debug!("kubernetes_api_sync grpc call failed: {}", e);
+                        debug!("report error: {}", e);
                     }
                 }
             }
@@ -681,32 +683,7 @@ impl ApiWatcher {
         let resource_watchers = watchers.clone();
 
         let sync_interval = context.config.load().sync_interval;
-
-        // send info as soon as node first queried
-        const INIT_WAIT_INTERVAL: Duration = Duration::from_secs(5);
-        let mut wait_count = 0;
-        while !Self::ready_stop(&running, &timer, INIT_WAIT_INTERVAL) {
-            let ws = resource_watchers.lock().unwrap();
-            if !ws.get("nodes").map(|w| w.ready()).unwrap_or(false) {
-                wait_count += 1;
-                if wait_count >= sync_interval.as_secs() / INIT_WAIT_INTERVAL.as_secs() {
-                    break;
-                }
-                continue;
-            }
-            mem::drop(ws);
-            Self::process(
-                &context,
-                &apiserver_version,
-                &session,
-                &err_msgs,
-                &mut watcher_versions,
-                &resource_watchers,
-                &exception_handler,
-            );
-            break;
-        }
-
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
         // 等一等watcher，第一个tick再上报
         while !Self::ready_stop(&running, &timer, sync_interval) {
             Self::process(
@@ -716,6 +693,7 @@ impl ApiWatcher {
                 &err_msgs,
                 &mut watcher_versions,
                 &resource_watchers,
+                &mut encoder,
                 &exception_handler,
             );
         }

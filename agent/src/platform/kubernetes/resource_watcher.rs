@@ -17,27 +17,19 @@
 use std::{
     collections::HashMap,
     fmt::Debug,
-    io::{self, Write},
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicU64, Ordering},
         Arc,
     },
     time::{Duration, SystemTime},
 };
 
 use enum_dispatch::enum_dispatch;
-use flate2::{write::ZlibEncoder, Compression};
 use futures::{StreamExt, TryStreamExt};
 use k8s_openapi::{
     api::{
-        apps::v1::{
-            DaemonSet, DaemonSetSpec, Deployment, DeploymentSpec, ReplicaSet, ReplicaSetSpec,
-            StatefulSet, StatefulSetSpec,
-        },
-        core::v1::{
-            Namespace, Node, NodeSpec, NodeStatus, Pod, PodStatus, ReplicationController,
-            ReplicationControllerSpec, Service, ServiceSpec,
-        },
+        apps::v1::{DaemonSet, Deployment, ReplicaSet, StatefulSet},
+        core::v1::{Namespace, Node, Pod, ReplicationController, Service},
         extensions, networking,
     },
     apimachinery::pkg::apis::meta::v1::ObjectMeta,
@@ -69,10 +61,9 @@ struct EventCounter {
 pub trait Watcher {
     fn start(&self) -> Option<JoinHandle<()>>;
     fn error(&self) -> Option<String>;
-    fn entries(&self) -> Vec<Vec<u8>>;
+    fn entries(&self) -> Vec<String>;
     fn kind(&self) -> String;
     fn version(&self) -> u64;
-    fn ready(&self) -> bool;
 }
 
 #[enum_dispatch(Watcher)]
@@ -97,17 +88,16 @@ pub enum GenericResourceWatcher {
 #[derive(Clone)]
 pub struct ResourceWatcher<K> {
     api: Api<K>,
-    entries: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+    entries: Arc<Mutex<HashMap<String, String>>>,
     err_msg: Arc<Mutex<Option<String>>>,
     kind: &'static str,
     version: Arc<AtomicU64>,
     runtime: Handle,
-    ready: Arc<AtomicBool>,
 }
 
 impl<K> Watcher for ResourceWatcher<K>
 where
-    K: Clone + Debug + DeserializeOwned + Resource + Serialize + Trimmable,
+    K: Clone + Debug + Send + DeserializeOwned + Resource + Serialize + 'static,
     K: Metadata<Ty = ObjectMeta>,
 {
     fn start(&self) -> Option<JoinHandle<()>> {
@@ -115,13 +105,12 @@ where
         let version = self.version.clone();
         let kind = self.kind;
         let err_msg = self.err_msg.clone();
-        let ready = self.ready.clone();
 
         let api = self.api.clone();
 
         let handle = self
             .runtime
-            .spawn(Self::process(entries, version, api, kind, err_msg, ready));
+            .spawn(Self::process(entries, version, api, kind, err_msg));
 
         info!("{} watcher started", self.kind);
         Some(handle)
@@ -139,22 +128,18 @@ where
         self.kind.to_string()
     }
 
-    fn entries(&self) -> Vec<Vec<u8>> {
+    fn entries(&self) -> Vec<String> {
         self.entries
             .blocking_lock()
             .values()
             .map(Clone::clone)
             .collect::<Vec<_>>()
     }
-
-    fn ready(&self) -> bool {
-        self.ready.load(Ordering::Relaxed)
-    }
 }
 
 impl<K> ResourceWatcher<K>
 where
-    K: Clone + Debug + DeserializeOwned + Resource + Serialize + Trimmable,
+    K: Clone + Debug + Send + DeserializeOwned + Resource + Serialize + 'static,
     K: Metadata<Ty = ObjectMeta>,
 {
     pub fn new(api: Api<K>, kind: &'static str, runtime: Handle) -> Self {
@@ -165,22 +150,17 @@ where
             kind,
             err_msg: Arc::new(Mutex::new(None)),
             runtime,
-            ready: Default::default(),
         }
     }
 
     async fn process(
-        entries: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+        entries: Arc<Mutex<HashMap<String, String>>>,
         version: Arc<AtomicU64>,
         api: Api<K>,
         kind: &'static str,
         err_msg: Arc<Mutex<Option<String>>>,
-        ready: Arc<AtomicBool>,
     ) {
-        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-        Self::get_list_entry(&mut encoder, &entries, &version, kind, &api, &err_msg).await;
-        ready.store(true, Ordering::Relaxed);
-        info!("{} watcher ready", kind);
+        Self::get_list_entry(&entries, &version, kind, &api, &err_msg).await;
 
         let mut ticker = time::interval(LIST_INTERVAL);
 
@@ -199,7 +179,6 @@ where
             tokio::select! {
                 maybe_event = stream.try_next() => {
                     Self::resolve_event(
-                        &mut encoder,
                         maybe_event,
                         &mut last_update,
                         &entries,
@@ -218,15 +197,15 @@ where
 
                     last_update = SystemTime::now();
                     last_refresh = SystemTime::now();
-                    Self::get_list_entry(&mut encoder, &entries, &version, kind, &api, &err_msg).await;
+
+                    Self::get_list_entry(&entries, &version, kind, &api, &err_msg).await;
                 }
             }
         }
     }
 
     async fn get_list_entry(
-        encoder: &mut ZlibEncoder<Vec<u8>>,
-        entries: &Arc<Mutex<HashMap<String, Vec<u8>>>>,
+        entries: &Arc<Mutex<HashMap<String, String>>>,
         version: &Arc<AtomicU64>,
         kind: &str,
         api: &Api<K>,
@@ -263,35 +242,19 @@ where
 
                 let mut new_entries = HashMap::new();
 
-                for object in object_list {
+                for mut object in object_list {
                     if object.meta().uid.as_ref().is_none() {
                         continue;
                     }
-                    let mut trim_object = object.trim();
-                    match serde_json::to_vec(&trim_object) {
+                    match serde_json::to_string(&object) {
                         Ok(serialized_object) => {
-                            let compressed_object =
-                                match Self::compress_entry(encoder, serialized_object.as_slice()) {
-                                    Ok(c) => c,
-                                    Err(e) => {
-                                        warn!(
-                                        "failed to compress {} resource with UID({}) error: {} ",
-                                        kind,
-                                        trim_object.meta().uid.as_ref().unwrap(),
-                                        e
-                                    );
-                                        continue;
-                                    }
-                                };
-                            new_entries.insert(
-                                trim_object.meta_mut().uid.take().unwrap(),
-                                compressed_object,
-                            );
+                            new_entries
+                                .insert(object.meta_mut().uid.take().unwrap(), serialized_object);
                         }
                         Err(e) => warn!(
                             "failed serialized resource {} UID({}) to json Err: {}",
                             kind,
-                            trim_object.meta().uid.as_ref().unwrap(),
+                            object.meta().uid.as_ref().unwrap(),
                             e
                         ),
                     }
@@ -311,10 +274,9 @@ where
     }
 
     async fn resolve_event(
-        encoder: &mut ZlibEncoder<Vec<u8>>,
         maybe_event: Result<Option<Event<K>>, runtime::watcher::Error>,
         last_update: &mut SystemTime,
-        entries: &Arc<Mutex<HashMap<String, Vec<u8>>>>,
+        entries: &Arc<Mutex<HashMap<String, String>>>,
         version: &Arc<AtomicU64>,
         kind: &str,
         err_msg: &Arc<Mutex<Option<String>>>,
@@ -325,7 +287,7 @@ where
                 match event {
                     Event::Applied(object) => {
                         event_counter.applied += 1;
-                        Self::insert_object(encoder, object, entries, version, kind).await;
+                        Self::insert_object(object, entries, version, kind).await;
                     }
                     Event::Deleted(mut object) => {
                         if let Some(uid) = object.meta_mut().uid.take() {
@@ -341,7 +303,7 @@ where
                     Event::Restarted(mut objects) => {
                         if let Some(object) = objects.pop() {
                             event_counter.restarted += 1;
-                            Self::insert_object(encoder, object, entries, version, kind).await;
+                            Self::insert_object(object, entries, version, kind).await;
                         }
                     }
                 }
@@ -396,31 +358,17 @@ where
     }
 
     async fn insert_object(
-        encoder: &mut ZlibEncoder<Vec<u8>>,
         object: K,
-        entries: &Arc<Mutex<HashMap<String, Vec<u8>>>>,
+        entries: &Arc<Mutex<HashMap<String, String>>>,
         version: &Arc<AtomicU64>,
         kind: &str,
     ) {
         let uid = object.meta().uid.clone();
         if let Some(uid) = uid {
-            let trim_object = object.trim();
-            let serialized_object = serde_json::to_vec(&trim_object);
+            let serialized_object = serde_json::to_string(&object);
             match serialized_object {
                 Ok(serobj) => {
-                    let compressed_object = match Self::compress_entry(encoder, serobj.as_slice()) {
-                        Ok(c) => c,
-                        Err(e) => {
-                            warn!(
-                                "failed to compress {} resource with UID({}) error: {} ",
-                                kind,
-                                trim_object.meta().uid.as_ref().unwrap(),
-                                e
-                            );
-                            return;
-                        }
-                    };
-                    entries.lock().await.insert(uid, compressed_object);
+                    entries.lock().await.insert(uid, serobj);
                     version.fetch_add(1, Ordering::SeqCst);
                 }
                 Err(e) => debug!(
@@ -429,271 +377,6 @@ where
                 ),
             }
         }
-    }
-
-    fn compress_entry(encoder: &mut ZlibEncoder<Vec<u8>>, entry: &[u8]) -> io::Result<Vec<u8>> {
-        encoder.write_all(entry)?;
-        encoder.reset(vec![])
-    }
-}
-
-pub trait Trimmable: 'static + Send {
-    fn trim(self) -> Self;
-}
-
-impl Trimmable for Pod {
-    fn trim(mut self) -> Self {
-        let mut trim_pod = Pod::default();
-        trim_pod.metadata = ObjectMeta {
-            uid: self.metadata.uid.take(),
-            name: self.metadata.name.take(),
-            namespace: self.metadata.namespace.take(),
-            owner_references: self.metadata.owner_references.take(),
-            creation_timestamp: self.metadata.creation_timestamp.take(),
-            labels: self.metadata.labels.take(),
-            ..Default::default()
-        };
-        if let Some(pod_status) = self.status.take() {
-            trim_pod.status = Some(PodStatus {
-                host_ip: pod_status.host_ip,
-                conditions: pod_status.conditions,
-                pod_ip: pod_status.pod_ip,
-                ..Default::default()
-            });
-        }
-        trim_pod
-    }
-}
-
-impl Trimmable for Node {
-    fn trim(mut self) -> Self {
-        let mut trim_node = Node::default();
-        trim_node.metadata = ObjectMeta {
-            uid: self.metadata.uid.take(),
-            name: self.metadata.name.take(),
-            labels: self.metadata.labels.take(),
-            ..Default::default()
-        };
-
-        if let Some(node_status) = self.status.take() {
-            trim_node.status = Some(NodeStatus {
-                addresses: node_status.addresses,
-                conditions: node_status.conditions,
-                capacity: node_status.capacity,
-                ..Default::default()
-            });
-        }
-        if let Some(node_spec) = self.spec.take() {
-            trim_node.spec = Some(NodeSpec {
-                pod_cidr: node_spec.pod_cidr,
-                ..Default::default()
-            });
-        }
-        trim_node
-    }
-}
-
-impl Trimmable for ReplicaSet {
-    fn trim(mut self) -> Self {
-        let mut trim_rs = ReplicaSet::default();
-        trim_rs.metadata = ObjectMeta {
-            uid: self.metadata.uid.take(),
-            name: self.metadata.name.take(),
-            namespace: self.metadata.namespace.take(),
-            owner_references: self.metadata.owner_references.take(),
-            labels: self.metadata.labels.take(),
-            ..Default::default()
-        };
-
-        if let Some(rs_spec) = self.spec.take() {
-            trim_rs.spec = Some(ReplicaSetSpec {
-                replicas: rs_spec.replicas,
-                selector: rs_spec.selector,
-                ..Default::default()
-            });
-        }
-
-        trim_rs
-    }
-}
-
-impl Trimmable for ReplicationController {
-    fn trim(mut self) -> Self {
-        let mut trim_rc = ReplicationController::default();
-        trim_rc.metadata = ObjectMeta {
-            uid: self.metadata.uid.take(),
-            name: self.metadata.name.take(),
-            namespace: self.metadata.namespace.take(),
-            ..Default::default()
-        };
-
-        if let Some(rc_spec) = self.spec.take() {
-            trim_rc.spec = Some(ReplicationControllerSpec {
-                replicas: rc_spec.replicas,
-                selector: rc_spec.selector,
-                template: rc_spec.template,
-                ..Default::default()
-            });
-        }
-
-        trim_rc
-    }
-}
-
-impl Trimmable for networking::v1::Ingress {
-    fn trim(mut self) -> Self {
-        self.metadata = ObjectMeta {
-            uid: self.metadata.uid.take(),
-            name: self.metadata.name.take(),
-            namespace: self.metadata.namespace.take(),
-            ..Default::default()
-        };
-        self.status = None;
-        self
-    }
-}
-
-impl Trimmable for networking::v1beta1::Ingress {
-    fn trim(mut self) -> Self {
-        self.metadata = ObjectMeta {
-            uid: self.metadata.uid.take(),
-            name: self.metadata.name.take(),
-            namespace: self.metadata.namespace.take(),
-            ..Default::default()
-        };
-        self.status = None;
-        self
-    }
-}
-
-impl Trimmable for extensions::v1beta1::Ingress {
-    fn trim(mut self) -> Self {
-        self.metadata = ObjectMeta {
-            uid: self.metadata.uid.take(),
-            name: self.metadata.name.take(),
-            namespace: self.metadata.namespace.take(),
-            ..Default::default()
-        };
-        self.status = None;
-        self
-    }
-}
-
-impl Trimmable for Route {
-    fn trim(mut self) -> Self {
-        self.metadata = ObjectMeta {
-            uid: self.metadata.uid.take(),
-            name: self.metadata.name.take(),
-            namespace: self.metadata.namespace.take(),
-            ..Default::default()
-        };
-        self.status = Default::default();
-        self
-    }
-}
-
-impl Trimmable for DaemonSet {
-    fn trim(mut self) -> Self {
-        let mut trim_ds = DaemonSet::default();
-        trim_ds.metadata = ObjectMeta {
-            uid: self.metadata.uid.take(),
-            name: self.metadata.name.take(),
-            namespace: self.metadata.namespace.take(),
-            labels: self.metadata.labels.take(),
-            ..Default::default()
-        };
-        if let Some(ds_spec) = self.spec.take() {
-            trim_ds.spec = Some(DaemonSetSpec {
-                selector: ds_spec.selector,
-                template: ds_spec.template,
-                ..Default::default()
-            })
-        }
-
-        trim_ds
-    }
-}
-
-impl Trimmable for StatefulSet {
-    fn trim(mut self) -> Self {
-        let mut trim_st = StatefulSet::default();
-        trim_st.metadata = ObjectMeta {
-            uid: self.metadata.uid.take(),
-            name: self.metadata.name.take(),
-            namespace: self.metadata.namespace.take(),
-            labels: self.metadata.labels.take(),
-            ..Default::default()
-        };
-
-        if let Some(st_spec) = self.spec.take() {
-            trim_st.spec = Some(StatefulSetSpec {
-                replicas: st_spec.replicas,
-                selector: st_spec.selector,
-                template: st_spec.template,
-                ..Default::default()
-            })
-        }
-        trim_st
-    }
-}
-
-impl Trimmable for Deployment {
-    fn trim(mut self) -> Self {
-        let mut trim_de = Deployment::default();
-        trim_de.metadata = ObjectMeta {
-            uid: self.metadata.uid.take(),
-            name: self.metadata.name.take(),
-            namespace: self.metadata.namespace.take(),
-            labels: self.metadata.labels.take(),
-            ..Default::default()
-        };
-
-        if let Some(de_spec) = self.spec.take() {
-            trim_de.spec = Some(DeploymentSpec {
-                replicas: de_spec.replicas,
-                selector: de_spec.selector,
-                template: de_spec.template,
-                ..Default::default()
-            });
-        }
-
-        trim_de
-    }
-}
-
-impl Trimmable for Service {
-    fn trim(mut self) -> Self {
-        let mut trim_svc = Service::default();
-        trim_svc.metadata = ObjectMeta {
-            uid: self.metadata.uid.take(),
-            name: self.metadata.name.take(),
-            namespace: self.metadata.namespace.take(),
-            annotations: self.metadata.annotations.take(),
-            ..Default::default()
-        };
-
-        if let Some(svc_spec) = self.spec.take() {
-            trim_svc.spec = Some(ServiceSpec {
-                selector: svc_spec.selector,
-                type_: svc_spec.type_,
-                cluster_ip: svc_spec.cluster_ip,
-                ports: svc_spec.ports,
-                ..Default::default()
-            });
-        }
-        trim_svc
-    }
-}
-
-impl Trimmable for Namespace {
-    fn trim(mut self) -> Self {
-        let mut trim_ns = Namespace::default();
-        trim_ns.metadata = ObjectMeta {
-            uid: self.metadata.uid.take(),
-            name: self.metadata.name.take(),
-            ..Default::default()
-        };
-        trim_ns
     }
 }
 
