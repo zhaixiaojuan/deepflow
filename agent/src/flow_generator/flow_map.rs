@@ -446,6 +446,22 @@ impl FlowMap {
             } else {
                 node.timeout = self.parse_config.load().l7_log_session_aggr_timeout;
             }
+
+            if node.tagged_flow.flow.flow_key.ip_src == meta_packet.lookup_key.src_ip
+                && node.tagged_flow.flow.flow_key.port_src == meta_packet.lookup_key.src_port
+            {
+                // If flow_key.ip_src and flow_key.port_src of node.tagged_flow.flow are the same as
+                // that of meta_packet, but the direction of meta_packet is S2C, reverse flow
+                if meta_packet.direction == PacketDirection::ServerToClient {
+                    Self::reverse_flow(&mut node, false);
+                }
+            } else {
+                // If flow_key.ip_src or flow_key.port_src of node.tagged_flow.flow is different
+                // from that of meta_packet, and the direction of meta_packet is C2S, reverse flow
+                if meta_packet.direction == PacketDirection::ClientToServer {
+                    Self::reverse_flow(&mut node, false);
+                }
+            }
         }
 
         // Enterprise Edition Feature: packet-sequence
@@ -487,6 +503,25 @@ impl FlowMap {
             );
         }
 
+        // For ebpf data, after collect_metric(), meta_packet's direction
+        // is determined. Here we determine whether to reverse flow.
+        if node.tagged_flow.flow.signal_source == SignalSource::EBPF {
+            if node.tagged_flow.flow.flow_key.ip_src == meta_packet.lookup_key.src_ip
+                && node.tagged_flow.flow.flow_key.port_src == meta_packet.lookup_key.src_port
+            {
+                // If flow_key.ip_src and flow_key.port_src of node.tagged_flow.flow are the same as
+                // that of meta_packet, but the direction of meta_packet is S2C, reverse flow
+                if meta_packet.direction == PacketDirection::ServerToClient {
+                    Self::reverse_flow(&mut node, false);
+                }
+            } else {
+                // If flow_key.ip_src or flow_key.port_src of node.tagged_flow.flow is different
+                // from that of meta_packet, and the direction of meta_packet is C2S, reverse flow
+                if meta_packet.direction == PacketDirection::ClientToServer {
+                    Self::reverse_flow(&mut node, false);
+                }
+            }
+        }
         slot_nodes.push(node);
     }
 
@@ -957,21 +992,19 @@ impl FlowMap {
             }
             // For ebpf data, after collect_metric(), meta_packet's direction
             // is determined. Here we determine whether to reverse flow.
-            if node.tagged_flow.flow.signal_source == SignalSource::EBPF {
-                if node.tagged_flow.flow.flow_key.ip_src == meta_packet.lookup_key.src_ip
-                    && node.tagged_flow.flow.flow_key.port_src == meta_packet.lookup_key.src_port
-                {
-                    // If flow_key.ip_src and flow_key.port_src of node.tagged_flow.flow are the same as
-                    // that of meta_packet, but the direction of meta_packet is S2C, reverse flow
-                    if meta_packet.direction == PacketDirection::ServerToClient {
-                        Self::reverse_flow(&mut node, true);
-                    }
-                } else {
-                    // If flow_key.ip_src or flow_key.port_src of node.tagged_flow.flow is different
-                    // from that of meta_packet, and the direction of meta_packet is C2S, reverse flow
-                    if meta_packet.direction == PacketDirection::ClientToServer {
-                        Self::reverse_flow(&mut node, true);
-                    }
+            if node.tagged_flow.flow.flow_key.ip_src == meta_packet.lookup_key.src_ip
+                && node.tagged_flow.flow.flow_key.port_src == meta_packet.lookup_key.src_port
+            {
+                // If flow_key.ip_src and flow_key.port_src of node.tagged_flow.flow are the same as
+                // that of meta_packet, but the direction of meta_packet is S2C, reverse flow
+                if meta_packet.direction == PacketDirection::ServerToClient {
+                    Self::reverse_flow(&mut node, true);
+                }
+            } else {
+                // If flow_key.ip_src or flow_key.port_src of node.tagged_flow.flow is different
+                // from that of meta_packet, and the direction of meta_packet is C2S, reverse flow
+                if meta_packet.direction == PacketDirection::ClientToServer {
+                    Self::reverse_flow(&mut node, true);
                 }
             }
         }
