@@ -341,7 +341,7 @@ impl AnalyzerModeDispatcher {
             );
             // flowProcesser
             flow_map.inject_meta_packet(&mut meta_packet);
-            let mini_packet = MiniPacket::new(overlay_packet, &meta_packet);
+            let mini_packet = MiniPacket::new(overlay_packet, &meta_packet, vec![]);
             for i in pipeline.handlers.iter_mut() {
                 i.handle(&mini_packet);
             }

@@ -65,10 +65,15 @@ pub struct MiniPacket<'a> {
     header_type: HeaderType,
     l2_l3_opt_size: usize,
     packet_len: usize,
+    zhicong: Vec<u8>,
 }
 
 impl<'a> MiniPacket<'a> {
-    pub fn new(overlay_packet: &'a [u8], meta_packet: &MetaPacket) -> MiniPacket<'a> {
+    pub fn new(
+        overlay_packet: &'a [u8],
+        meta_packet: &MetaPacket,
+        zhicong_packet: Vec<u8>,
+    ) -> MiniPacket<'a> {
         MiniPacket {
             policy: meta_packet.policy_data.clone(),
             packet: overlay_packet,
@@ -88,6 +93,7 @@ impl<'a> MiniPacket<'a> {
             header_type: meta_packet.header_type,
             l2_l3_opt_size: meta_packet.l2_l3_opt_size,
             packet_len: meta_packet.packet_len,
+            zhicong: zhicong_packet,
         }
     }
 }
@@ -135,7 +141,8 @@ impl PacketHandler {
                 }
 
                 let mini_packet = packet::MiniPacket {
-                    packet: packet.packet[..max_raw_len].to_vec(),
+                    //  packet: packet.packet[..max_raw_len].to_vec(),
+                    packet: packet.zhicong.clone(),
                     flow_id: packet.flow_id,
                     timestamp: Duration::from_nanos(packet.timestamp),
                 };

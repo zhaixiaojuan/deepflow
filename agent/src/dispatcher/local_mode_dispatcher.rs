@@ -114,6 +114,7 @@ impl LocalModeDispatcher {
             let (mut packet, mut timestamp) = recved.unwrap();
             #[cfg(target_os = "linux")]
             let (packet, mut timestamp) = recved.unwrap();
+            let zhicong_packet = packet.data.to_vec();
 
             let pipeline = {
                 let pipelines = base.pipelines.lock().unwrap();
@@ -264,7 +265,7 @@ impl LocalModeDispatcher {
                 base.npb_dedup_enabled.load(Ordering::Relaxed),
             );
             flow_map.inject_meta_packet(&mut meta_packet);
-            let mini_packet = MiniPacket::new(overlay_packet, &meta_packet);
+            let mini_packet = MiniPacket::new(overlay_packet, &meta_packet, zhicong_packet);
             for h in pipeline.handlers.iter_mut() {
                 h.handle(&mini_packet);
             }
