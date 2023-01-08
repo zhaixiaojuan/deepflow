@@ -134,6 +134,7 @@ impl StashKey {
         .union(Code::VTAP_ID)
         .union(Code::PROTOCOL)
         .union(Code::DIRECTION)
+        .union(Code::GPID)
         .union(Code::TAP_TYPE);
     const SINGLE_IP_PORT: Code = Self::SINGLE_IP.union(Code::SERVER_PORT);
     const SINGLE_MAC_IP_PORT: Code = Self::SINGLE_IP.union(Code::MAC).union(Code::SERVER_PORT);
@@ -151,6 +152,7 @@ impl StashKey {
         .union(Code::VTAP_ID)
         .union(Code::PROTOCOL)
         .union(Code::DIRECTION)
+        .union(Code::GPID_PATH)
         .union(Code::TAP_TYPE)
         .union(Code::TAP_PORT);
     const EDGE_IP_PORT: Code = Self::EDGE_IP.union(Code::SERVER_PORT);
