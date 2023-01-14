@@ -245,12 +245,15 @@ impl FlowMap {
             let time_hashset = &mut time_set[time_in_unit as usize & (self.time_window_size - 1)];
             for flow_key in time_hashset.drain() {
                 let nodes = node_map.get_mut(&flow_key).unwrap();
+                let mut start_index = 0
                 loop {
                     let Some(index) = nodes
+                        .skip(start_index)
                         .iter()
                         .position(|node| node.timestamp_key <= time_in_unit) else {
                             break;
                     };
+                    start_index = index
                     let mut node = nodes.swap_remove(index);
 
                     let timeout = node.recent_time + node.timeout;
