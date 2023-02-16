@@ -48,10 +48,9 @@ func (s *service) DebugGPIDGlobalData(ctx context.Context, in *api.GPIDSyncReque
 		in.GetCtrlIp(), in.GetCtrlMac())
 
 	processInfo := trisolaris.GetGVTapInfo().GetProcessInfo()
-	entries, loopbackEntries := processInfo.GetGlobalEntries()
+	entries := processInfo.GetGlobalEntries()
 	return &api.GPIDGlobalData{
-		Entries:         entries,
-		LoopbackEntries: loopbackEntries,
+		Entries: entries,
 	}, nil
 }
 
@@ -76,5 +75,12 @@ func (s *service) DebugRealGlobalData(ctx context.Context, in *api.GPIDSyncReque
 	processInfo := trisolaris.GetGVTapInfo().GetProcessInfo()
 	return &api.RealGlobalData{
 		Entries: processInfo.GetRealGlobalData(),
+	}, nil
+}
+
+func (s *service) DebugRIPToVIP(ctx context.Context, in *api.GPIDSyncRequest) (*api.RVData, error) {
+	processInfo := trisolaris.GetGVTapInfo().GetProcessInfo()
+	return &api.RVData{
+		Entries: processInfo.GetRVData(),
 	}, nil
 }

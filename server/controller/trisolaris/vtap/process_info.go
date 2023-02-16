@@ -20,6 +20,7 @@ import (
 	"context"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,30 +34,79 @@ import (
 	models "github.com/deepflowio/deepflow/server/controller/db/mysql"
 	"github.com/deepflowio/deepflow/server/controller/trisolaris/config"
 	"github.com/deepflowio/deepflow/server/controller/trisolaris/dbmgr"
+	"github.com/deepflowio/deepflow/server/controller/trisolaris/utils"
+	libu "github.com/deepflowio/deepflow/server/libs/utils"
+)
+
+const (
+	GPID0_MASK = 0xFFFFFFFF00000000
+	GPID1_MASK = 0x00000000FFFFFFFF
+	CACHE_SIZE = 65535
+
+	TCP_PROTO_STR = "TCP"
+	UDP_PROTO_STR = "UDP"
 )
 
 type GlobalEntry struct {
-	vtapID uint32
-	pid    uint32
+	vtapId0 uint32
+	pid0    uint32
+	vtapId1 uint32
+	pid1    uint32
 }
 
-func NewGlobalEntry(vtapID uint32, pid uint32) *GlobalEntry {
-	return &GlobalEntry{
-		vtapID: vtapID,
-		pid:    pid,
+func newGlobalEntry() *GlobalEntry {
+	return &GlobalEntry{}
+}
+
+func (g *GlobalEntry) setPid0(pid0 uint32, vtapId0 uint32) {
+	if g == nil {
+		return
 	}
+	g.vtapId0 = vtapId0
+	g.pid0 = pid0
+}
+
+func (g *GlobalEntry) setPid1(pid1 uint32, vtapId1 uint32) {
+	if g == nil {
+		return
+	}
+	g.vtapId1 = vtapId1
+	g.pid1 = pid1
+}
+
+func (g *GlobalEntry) getPid0Data() (pid0, vtapId0 uint32) {
+	if g == nil {
+		return
+	}
+	pid0 = g.pid0
+	vtapId0 = g.vtapId0
+	return
+}
+
+func (g *GlobalEntry) getPid1Data() (pid1, vtapId1 uint32) {
+	if g == nil {
+		return
+	}
+	pid1 = g.pid1
+	vtapId1 = g.vtapId1
+	return
+}
+
+func (g *GlobalEntry) getData() (pid0, vtapId0, pid1, vtapId1 uint32) {
+	if g == nil {
+		return
+	}
+	pid0 = g.pid0
+	vtapId0 = g.vtapId0
+	pid1 = g.pid1
+	vtapId1 = g.vtapId1
+	return
 }
 
 // epcId(u16),port(u16),ip(u32)
 func generateEPKey(epcId, port, ip uint32) uint64 {
 	epcIDPort := epcId<<16 | port
 	return uint64(epcIDPort)<<32 | uint64(ip)
-}
-
-// vtapID(u32),port(u16),netnsIndex(u16)
-func generateLoopbackKey(vtapID, port, netnsIndex uint32) uint64 {
-	portNS := port<<16 | netnsIndex
-	return uint64(vtapID)<<32 | uint64(portNS)
 }
 
 func getEpcIdPortIP(value uint64) (epcId, port, ip uint32) {
@@ -67,194 +117,137 @@ func getEpcIdPortIP(value uint64) (epcId, port, ip uint32) {
 	return
 }
 
-func getVTapIDPortNetnsIndex(value uint64) (vtapID, port, netnsIndex uint32) {
-	vtapID = uint32(value >> 32)
-	portNS := uint32(value & 0xffffffff)
-	netnsIndex = portNS & 0xffff
-	port = portNS >> 16
-	return
+func convertProto(proto string) trident.ServiceProtocol {
+	switch proto {
+	case TCP_PROTO_STR:
+		return trident.ServiceProtocol_TCP_SERVICE
+	case UDP_PROTO_STR:
+		return trident.ServiceProtocol_UDP_SERVICE
+	}
+
+	return 0
 }
 
-var serviceTypes = [MAX_SERVICE_TYPE]int{TCPServer, TCPClient, UDPServer, UDPClient}
-var ipTypes = [MAX_IP_TYPE]int{NORMAL_IP, LOOP_IP}
+var serviceTypes = [MAX_SERVICE_TYPE]int{TCPService, UDPService}
 
 const (
-	TCPServer = iota
-	TCPClient
-	UDPServer
-	UDPClient
+	TCPService = iota
+	UDPService
 	MAX_SERVICE_TYPE
 )
 
-const (
-	NORMAL_IP = iota // normal_ip (protocol + role)->(epc_id + port + ip)->(vtap_id + pid)
-	LOOP_IP          // 127.0.0.1/8 loopback (protocol + role)->(vtap_id + port + netnsIndex)->(vtap_id + pid)
-	MAX_IP_TYPE
-)
-
-type EntryData [MAX_SERVICE_TYPE][MAX_IP_TYPE]AggregateMap
+type EntryData [MAX_SERVICE_TYPE]*utils.U128IDMap
 
 func NewEntryData() EntryData {
 	var entryData EntryData
 	for index, _ := range entryData {
-		entryData[index][NORMAL_IP] = make(AggregateMap)
-		entryData[index][LOOP_IP] = make(AggregateMap)
+		entryData[index] = utils.NewU128IDMapNoStats("trisolaris-global-gpid", CACHE_SIZE)
 	}
 
 	return entryData
 }
 
-// 127.0.0.1/8
-func isLoopbackIP(ip uint32) bool {
-	if ip&0xFF000000 == 0x7F000000 {
-		return true
-	}
-
-	return false
-}
-
-func (e EntryData) getAggregateMap(protocol trident.ServiceProtocol, role trident.RoleType, ip uint32) AggregateMap {
+func (d EntryData) getAggregateMap(protocol trident.ServiceProtocol) *utils.U128IDMap {
 	serviceIndex := MAX_SERVICE_TYPE
 	switch {
-	case protocol == trident.ServiceProtocol_TCP_SERVICE && role == trident.RoleType_ROLE_SERVER:
-		serviceIndex = TCPServer
-	case protocol == trident.ServiceProtocol_TCP_SERVICE && role == trident.RoleType_ROLE_CLIENT:
-		serviceIndex = TCPClient
-	case protocol == trident.ServiceProtocol_UDP_SERVICE && role == trident.RoleType_ROLE_SERVER:
-		serviceIndex = UDPServer
-	case protocol == trident.ServiceProtocol_UDP_SERVICE && role == trident.RoleType_ROLE_CLIENT:
-		serviceIndex = UDPClient
+	case protocol == trident.ServiceProtocol_TCP_SERVICE:
+		serviceIndex = TCPService
+	case protocol == trident.ServiceProtocol_UDP_SERVICE:
+		serviceIndex = UDPService
 	}
 	if serviceIndex == MAX_SERVICE_TYPE {
 		return nil
 	}
-	ipIndex := NORMAL_IP
-	if isLoopbackIP(ip) == true {
-		ipIndex = LOOP_IP
-	}
 
-	return e[serviceIndex][ipIndex]
+	return d[serviceIndex]
 }
 
-type AggregateMap map[uint64]*GlobalEntry
-
-func (e AggregateMap) addData(vtapID, epcID, port, pid, ip, netnsIndex uint32) {
-	if isLoopbackIP(ip) == false {
-		e[generateEPKey(epcID, port, ip)] = NewGlobalEntry(vtapID, pid)
-	} else {
-		e[generateLoopbackKey(vtapID, port, netnsIndex)] = NewGlobalEntry(vtapID, pid)
+func (d EntryData) addData(vtapId uint32, entry *trident.GPIDSyncEntry, p *ProcessInfo) {
+	aggregateMap := d.getAggregateMap(entry.GetProtocol())
+	if aggregateMap == nil {
+		return
 	}
-}
-
-func (e AggregateMap) getData(epcID, port, ip, netnsIndex, vtapID uint32) *GlobalEntry {
-	if isLoopbackIP(ip) == false {
-		return e[generateEPKey(epcID, port, ip)]
-	} else {
-		return e[generateLoopbackKey(vtapID, port, netnsIndex)]
-	}
-}
-
-func (d EntryData) addData(vtapID uint32, entry *trident.GPIDSyncEntry) {
-	protocol := entry.GetProtocol()
-	netnsIndex := entry.GetNetnsIdx()
-	if entry.GetPid_0() > 0 {
-		aggMap := d.getAggregateMap(protocol, trident.RoleType_ROLE_CLIENT, entry.GetIpv4_0())
-		if aggMap != nil {
-			aggMap.addData(vtapID, entry.GetEpcId_0(), entry.GetPort_0(),
-				entry.GetPid_0(), entry.GetIpv4_0(), netnsIndex)
+	pid0, pid1 := entry.GetPid_0(), entry.GetPid_1()
+	if pid0 > 0 || pid1 > 0 {
+		key0, key1 := p.getKey(entry)
+		value := newGlobalEntry()
+		if pid0 > 0 {
+			value.setPid0(pid0, vtapId)
 		}
-	}
-	if entry.GetPid_1() > 0 {
-		aggMap := d.getAggregateMap(protocol, trident.RoleType_ROLE_SERVER, entry.GetIpv4_1())
-		if aggMap != nil {
-			aggMap.addData(vtapID, entry.GetEpcId_1(), entry.GetPort_1(),
-				entry.GetPid_1(), entry.GetIpv4_1(), netnsIndex)
+		if pid1 > 0 {
+			value.setPid1(pid1, vtapId)
 		}
-	}
-	if entry.GetPidReal() > 0 {
-		aggMap := d.getAggregateMap(protocol, entry.GetRoleReal(), entry.GetIpv4Real())
-		if aggMap != nil {
-			aggMap.addData(vtapID, entry.GetEpcIdReal(), entry.GetPortReal(),
-				entry.GetPidReal(), entry.GetIpv4Real(), netnsIndex)
+		mapValue, add := aggregateMap.AddOrGet(key0, key1, value, false)
+		if add == false {
+			entry := mapValue.(*GlobalEntry)
+			if pid0 > 0 {
+				entry.setPid0(pid0, vtapId)
+			}
+			if pid1 > 0 {
+				entry.setPid1(pid1, vtapId)
+			}
 		}
 	}
 }
 
-func (d EntryData) getData(protocol trident.ServiceProtocol, role trident.RoleType, epcID, port, ip, vtapID, netnsIndex uint32) *GlobalEntry {
-	aggMap := d.getAggregateMap(protocol, role, ip)
-	if aggMap == nil {
+func (d EntryData) getData(entry *trident.GPIDSyncEntry, p *ProcessInfo) *GlobalEntry {
+	aggregateMap := d.getAggregateMap(entry.GetProtocol())
+	if aggregateMap == nil {
 		return nil
 	}
-	return aggMap.getData(epcID, port, ip, netnsIndex, vtapID)
+	key0, key1 := p.getKey(entry)
+	value, _ := aggregateMap.Get(key0, key1)
+	if value == nil {
+		return nil
+	}
+	return value.(*GlobalEntry)
 }
 
-func (e EntryData) getGPIDGlobalData(p *ProcessInfo) ([]*trident.GlobalGPIDEntry, []*trident.GlobalLoopbackGPIDEntry) {
-	vtapIDAndPIDToGPID := p.vtapIDAndPIDToGPID
+func (e EntryData) getGPIDGlobalData(p *ProcessInfo) []*trident.GlobalGPIDEntry {
+
 	allData := []*trident.GlobalGPIDEntry{}
-	loopAllData := []*trident.GlobalLoopbackGPIDEntry{}
 	for _, serviceIndex := range serviceTypes {
 		var protocol trident.ServiceProtocol
-		var role trident.RoleType
 		switch serviceIndex {
-		case TCPServer:
+		case TCPService:
 			protocol = trident.ServiceProtocol_TCP_SERVICE
-			role = trident.RoleType_ROLE_SERVER
-		case TCPClient:
-			protocol = trident.ServiceProtocol_TCP_SERVICE
-			role = trident.RoleType_ROLE_CLIENT
-		case UDPServer:
+		case UDPService:
 			protocol = trident.ServiceProtocol_UDP_SERVICE
-			role = trident.RoleType_ROLE_SERVER
-		case UDPClient:
-			protocol = trident.ServiceProtocol_UDP_SERVICE
-			role = trident.RoleType_ROLE_CLIENT
-
 		}
 		if serviceIndex >= MAX_SERVICE_TYPE {
 			break
 		}
-		for _, ipIndex := range ipTypes {
-			if ipIndex >= MAX_IP_TYPE {
-				break
+		for keyValue := range e[serviceIndex].Iter() {
+			key0, key1, value := keyValue.GetData()
+			epcId0, port0, ip0 := getEpcIdPortIP(key0)
+			epcId1, port1, ip1 := getEpcIdPortIP(key1)
+			realValue, ok := value.(*GlobalEntry)
+			if ok == false {
+				continue
 			}
-			for key, data := range e[serviceIndex][ipIndex] {
-				switch ipIndex {
-				case NORMAL_IP:
-					epcId, port, ip := getEpcIdPortIP(key)
-					vtapID := data.vtapID
-					pid := data.pid
-					gpid := vtapIDAndPIDToGPID.getData(vtapID, pid)
-					entry := &trident.GlobalGPIDEntry{
-						VtapId:   &vtapID,
-						Pid:      &pid,
-						Gpid:     &gpid,
-						EpcId:    &epcId,
-						Ipv4:     &ip,
-						Port:     &port,
-						Role:     &role,
-						Protocol: &protocol,
-					}
-					allData = append(allData, entry)
-				case LOOP_IP:
-					_, port, netnsIndex := getVTapIDPortNetnsIndex(key)
-					vtapID := data.vtapID
-					pid := data.pid
-					gpid := vtapIDAndPIDToGPID.getData(vtapID, pid)
-					entry := &trident.GlobalLoopbackGPIDEntry{
-						VtapId:   &vtapID,
-						Pid:      &pid,
-						Gpid:     &gpid,
-						Port:     &port,
-						Role:     &role,
-						Protocol: &protocol,
-						NetnsIdx: &netnsIndex,
-					}
-					loopAllData = append(loopAllData, entry)
-				}
+			pid0, vtapId0, pid1, vtapId1 := realValue.getData()
+			gpid0 := p.vtapIdAndPIDToGPID.getData(vtapId0, pid0)
+			gpid1 := p.vtapIdAndPIDToGPID.getData(vtapId1, pid1)
+			entry := &trident.GlobalGPIDEntry{
+				Protocol: &protocol,
+				VtapId_1: &vtapId1,
+				EpcId_1:  &epcId1,
+				Ipv4_1:   &ip1,
+				Port_1:   &port1,
+				Pid_1:    &pid1,
+				Gpid_1:   &gpid1,
+				VtapId_0: &vtapId0,
+				EpcId_0:  &epcId0,
+				Ipv4_0:   &ip0,
+				Port_0:   &port0,
+				Pid_0:    &pid0,
+				Gpid_0:   &gpid0,
 			}
+			allData = append(allData, entry)
 		}
 	}
-	return allData, loopAllData
+
+	return allData
 }
 
 type CacheReq struct {
@@ -334,16 +327,16 @@ func (r *VTapIDToReq) updateCacheReq(cacheReq *CacheReq) {
 	r.Unlock()
 }
 
-func (r *VTapIDToReq) getCacheReq(vtapID uint32) *CacheReq {
+func (r *VTapIDToReq) getCacheReq(vtapId uint32) *CacheReq {
 	r.RLock()
-	cacheReq := r.idToReq[vtapID]
+	cacheReq := r.idToReq[vtapId]
 	r.RUnlock()
 	return cacheReq
 }
 
-func (r *VTapIDToReq) getReq(vtapID uint32) *trident.GPIDSyncRequest {
+func (r *VTapIDToReq) getReq(vtapId uint32) *trident.GPIDSyncRequest {
 	r.RLock()
-	cacheReq := r.idToReq[vtapID]
+	cacheReq := r.idToReq[vtapId]
 	r.RUnlock()
 	if cacheReq != nil {
 		return cacheReq.getReq()
@@ -360,9 +353,9 @@ func (r *VTapIDToReq) getAllReqAndClear() map[uint32]*CacheReq {
 	return allData
 }
 
-func (r *VTapIDToReq) deleteData(vtapID uint32) {
+func (r *VTapIDToReq) deleteData(vtapId uint32) {
 	r.Lock()
-	delete(r.idToReq, vtapID)
+	delete(r.idToReq, vtapId)
 	r.Unlock()
 }
 
@@ -375,60 +368,128 @@ func NewVTapIDToReq() *VTapIDToReq {
 // (vtap_id + pid): gpid
 type IDToGPID map[uint64]uint32
 
-func generateVPKey(vtapID uint32, pid uint32) uint64 {
-	return uint64(vtapID)<<32 | uint64(pid)
+func generateVPKey(vtapId uint32, pid uint32) uint64 {
+	return uint64(vtapId)<<32 | uint64(pid)
 }
 
-func (p IDToGPID) getData(vtapID uint32, pid uint32) uint32 {
-	return p[generateVPKey(vtapID, pid)]
+func (p IDToGPID) getData(vtapId uint32, pid uint32) uint32 {
+	return p[generateVPKey(vtapId, pid)]
 }
 
 func (p IDToGPID) addData(process *models.Process) {
 	p[generateVPKey(uint32(process.VTapID), uint32(process.PID))] = uint32(process.ID)
 }
 
-type RealClientToRealServer map[uint64]uint64
-
-func (r RealClientToRealServer) addData(entry *trident.GPIDSyncEntry) {
-	if entry.GetIpv4Real() != 0 && entry.GetRoleReal() == trident.RoleType_ROLE_CLIENT &&
-		entry.GetIpv4_1() != 0 {
-		key := generateEPKey(entry.GetEpcIdReal(), entry.GetPortReal(), entry.GetIpv4Real())
-		value := generateEPKey(entry.GetEpcId_1(), entry.GetPort_1(), entry.GetIpv4_1())
-		r[key] = value
-	}
+type RealServerData struct {
+	vtapId    uint32
+	epcIdReal uint32
+	portReal  uint32
+	ipv4Real  uint32
+	pidReal   uint32
 }
 
-func (r RealClientToRealServer) getData(entry *trident.GPIDSyncEntry) (epcId, port, ip uint32) {
-	key := generateEPKey(entry.GetEpcId_0(), entry.GetPort_0(), entry.GetIpv4_0())
-	epcId, port, ip = getEpcIdPortIP(r[key])
+func (r RealServerData) getData() (uint32, uint32, uint32, uint32, uint32) {
+	return r.vtapId, r.epcIdReal, r.portReal, r.ipv4Real, r.pidReal
+}
+
+type RipToVipMap map[uint64]uint64
+
+type RVData [MAX_SERVICE_TYPE]RipToVipMap
+
+func NewRVData() RVData {
+	var rvData RVData
+	for index, _ := range rvData {
+		rvData[index] = make(RipToVipMap)
+	}
+
+	return rvData
+}
+
+func (r RVData) getRVmap(protocol trident.ServiceProtocol) RipToVipMap {
+	serviceIndex := MAX_SERVICE_TYPE
+	switch {
+	case protocol == trident.ServiceProtocol_TCP_SERVICE:
+		serviceIndex = TCPService
+	case protocol == trident.ServiceProtocol_UDP_SERVICE:
+		serviceIndex = UDPService
+	}
+	if serviceIndex == MAX_SERVICE_TYPE {
+		return nil
+	}
+
+	return r[serviceIndex]
+}
+
+func (r RVData) addData(epcId, rip, rport, vip, vport uint32, protocol trident.ServiceProtocol) {
+	rvMap := r.getRVmap(protocol)
+	if rvMap == nil {
+		return
+	}
+	rvMap.addData(epcId, rip, rport, vip, vport)
+}
+
+func (r RVData) getVIP(repcId, rip, rport uint32, protocol trident.ServiceProtocol) (vip, vport uint32) {
+	rvMap := r.getRVmap(protocol)
+	if rvMap == nil {
+		return
+	}
+	vip, vport = rvMap.getVIP(repcId, rip, rport)
 	return
 }
 
-func (r RealClientToRealServer) getGlobalRealData() []*trident.RealClientToRealServer {
-	data := make([]*trident.RealClientToRealServer, 0, len(r))
-	for key, value := range r {
-		epcIdR, portR, ipR := getEpcIdPortIP(key)
-		epcIdC, portC, ipC := getEpcIdPortIP(value)
-		data = append(data, &trident.RealClientToRealServer{
-			EpcId_1:   &epcIdC,
-			Ipv4_1:    &ipC,
-			Port_1:    &portC,
-			EpcIdReal: &epcIdR,
-			Ipv4Real:  &ipR,
-			PortReal:  &portR,
-		})
+func (r RVData) getDebugData() []*trident.RipToVip {
+	allData := []*trident.RipToVip{}
+	for _, serviceIndex := range serviceTypes {
+		var protocol trident.ServiceProtocol
+		switch serviceIndex {
+		case TCPService:
+			protocol = trident.ServiceProtocol_TCP_SERVICE
+		case UDPService:
+			protocol = trident.ServiceProtocol_UDP_SERVICE
+		}
+		if serviceIndex >= MAX_SERVICE_TYPE {
+			break
+		}
+		for key, value := range r[serviceIndex] {
+			epcId, rport, rip := getEpcIdPortIP(key)
+			_, vport, vip := getEpcIdPortIP(value)
+			entry := &trident.RipToVip{
+				Protocol: &protocol,
+				EpcId:    &epcId,
+				RIpv4:    &rip,
+				RPort:    &rport,
+				VIpv4:    &vip,
+				VPort:    &vport,
+			}
+			allData = append(allData, entry)
+		}
 	}
 
-	return data
+	return allData
+
+}
+
+func (v RipToVipMap) addData(epcId, rip, rport, vip, vport uint32) {
+	v[generateEPKey(epcId, rport, rip)] = generateEPKey(0, vport, vip)
+}
+
+func (v RipToVipMap) getVIP(repcId, rip, rport uint32) (vip, vport uint32) {
+	key, ok := v[generateEPKey(repcId, rport, rip)]
+	if ok == false {
+		return
+	}
+	_, vport, vip = getEpcIdPortIP(key)
+	return
 }
 
 type ProcessInfo struct {
 	sendGPIDReq            *VTapIDToReq
-	vtapIDToLocalGPIDReq   *VTapIDToReq
-	vtapIDToShareGPIDReq   *VTapIDToReq
-	vtapIDAndPIDToGPID     IDToGPID
+	vtapIdToLocalGPIDReq   *VTapIDToReq
+	vtapIdToShareGPIDReq   *VTapIDToReq
+	vtapIdAndPIDToGPID     IDToGPID
+	rvData                 RVData
 	globalLocalEntries     EntryData
-	realClientToRealServer RealClientToRealServer
+	realClientToRealServer *utils.U128IDMap
 	grpcConns              map[string]*grpc.ClientConn
 	db                     *gorm.DB
 	config                 *config.Config
@@ -437,26 +498,107 @@ type ProcessInfo struct {
 func NewProcessInfo(db *gorm.DB, cfg *config.Config) *ProcessInfo {
 	return &ProcessInfo{
 		sendGPIDReq:            NewVTapIDToReq(),
-		vtapIDToLocalGPIDReq:   NewVTapIDToReq(),
-		vtapIDToShareGPIDReq:   NewVTapIDToReq(),
-		vtapIDAndPIDToGPID:     make(IDToGPID),
+		vtapIdToLocalGPIDReq:   NewVTapIDToReq(),
+		vtapIdToShareGPIDReq:   NewVTapIDToReq(),
+		vtapIdAndPIDToGPID:     make(IDToGPID),
+		rvData:                 NewRVData(),
 		globalLocalEntries:     NewEntryData(),
-		realClientToRealServer: make(RealClientToRealServer),
+		realClientToRealServer: utils.NewU128IDMapNoStats("trisolaris-real-pid", CACHE_SIZE),
 		grpcConns:              make(map[string]*grpc.ClientConn),
 		db:                     db,
 		config:                 cfg,
 	}
 }
 
+func (p *ProcessInfo) GetRealGlobalData() []*trident.RealClientToRealServer {
+	data := make([]*trident.RealClientToRealServer, 0, p.realClientToRealServer.Size())
+
+	for keyValue := range p.realClientToRealServer.Iter() {
+		key0, key1, value := keyValue.GetData()
+		epcId0, port0, ip0 := getEpcIdPortIP(key0)
+		epcId1, port1, ip1 := getEpcIdPortIP(key1)
+		realValue, ok := value.(*RealServerData)
+		if ok == false {
+			continue
+		}
+		vtapIdReal, epcIdReal, portReal, ipReal, pidReal := realValue.getData()
+		etnry := &trident.RealClientToRealServer{
+			EpcId_1:    &epcId1,
+			Ipv4_1:     &ip1,
+			Port_1:     &port1,
+			EpcId_0:    &epcId0,
+			Ipv4_0:     &ip0,
+			Port_0:     &port0,
+			EpcIdReal:  &epcIdReal,
+			Ipv4Real:   &ipReal,
+			PortReal:   &portReal,
+			PidReal:    &pidReal,
+			VtapIdReal: &vtapIdReal,
+		}
+		data = append(data, etnry)
+	}
+
+	return data
+}
+
+func (p *ProcessInfo) GetRVData() []*trident.RipToVip {
+	return p.rvData.getDebugData()
+}
+
+func (p *ProcessInfo) getKey(entry *trident.GPIDSyncEntry) (key0, key1 uint64) {
+	// server
+	// If there is a real client, use the real client ip/port instead of the client ip/port
+	// Use the server ip/port to query the load balancing RIP>VIP mapping table on the controller and convert it to vip/vport
+	if entry.GetPid_1() > 0 && entry.GetIpv4Real() > 0 && entry.GetRoleReal() == trident.RoleType_ROLE_CLIENT {
+		key0 = generateEPKey(entry.GetEpcIdReal(), entry.GetPortReal(), entry.GetIpv4Real())
+		repcId, rport, ripv4 := entry.GetEpcId_1(), entry.GetPort_1(), entry.GetIpv4_1()
+		vipv4, vport := p.rvData.getVIP(repcId, ripv4, rport, entry.GetProtocol())
+		if vipv4 > 0 && vport > 0 {
+			key1 = generateEPKey(repcId, vport, vipv4)
+		} else {
+			key1 = generateEPKey(repcId, rport, ripv4)
+		}
+	} else {
+		key0 = generateEPKey(entry.GetEpcId_0(), entry.GetPort_0(), entry.GetIpv4_0())
+		key1 = generateEPKey(entry.GetEpcId_1(), entry.GetPort_1(), entry.GetIpv4_1())
+	}
+
+	return
+}
+
+func (p *ProcessInfo) addRealData(vtapId uint32, entry *trident.GPIDSyncEntry, u128Map *utils.U128IDMap) {
+	if entry.GetPid_1() > 0 && entry.GetIpv4Real() > 0 && entry.GetRoleReal() == trident.RoleType_ROLE_CLIENT {
+		key0, key1 := p.getKey(entry)
+		value := &RealServerData{
+			epcIdReal: entry.GetEpcId_1(),
+			portReal:  entry.GetPort_1(),
+			ipv4Real:  entry.GetIpv4_1(),
+			pidReal:   entry.GetPid_1(),
+			vtapId:    vtapId,
+		}
+		u128Map.AddOrGet(key0, key1, value, true)
+	}
+}
+
+func (p *ProcessInfo) getRealData(entry *trident.GPIDSyncEntry) *RealServerData {
+	key0, key1 := p.getKey(entry)
+	realData, ok := p.realClientToRealServer.Get(key0, key1)
+	if ok {
+		return realData.(*RealServerData)
+	}
+
+	return nil
+}
+
 func (p *ProcessInfo) UpdateVTapGPIDReq(req *trident.GPIDSyncRequest) {
 	p.sendGPIDReq.updateReq(req)
 }
 
-func (p *ProcessInfo) GetVTapGPIDReq(vtapID uint32) (*trident.GPIDSyncRequest, uint32) {
-	cacheReq := p.sendGPIDReq.getCacheReq(vtapID)
+func (p *ProcessInfo) GetVTapGPIDReq(vtapId uint32) (*trident.GPIDSyncRequest, uint32) {
+	cacheReq := p.sendGPIDReq.getCacheReq(vtapId)
 	if cacheReq == nil {
-		localReq := p.vtapIDToLocalGPIDReq.getCacheReq(vtapID)
-		shareReq := p.vtapIDToShareGPIDReq.getCacheReq(vtapID)
+		localReq := p.vtapIdToLocalGPIDReq.getCacheReq(vtapId)
+		shareReq := p.vtapIdToShareGPIDReq.getCacheReq(vtapId)
 		if localReq != nil && shareReq != nil {
 			if localReq.After(shareReq) {
 				cacheReq = localReq
@@ -477,7 +619,7 @@ func (p *ProcessInfo) GetVTapGPIDReq(vtapID uint32) (*trident.GPIDSyncRequest, u
 
 func (p *ProcessInfo) UpdateGPIDReqFromShare(shareReq *trident.ShareGPIDSyncRequests) {
 	for _, req := range shareReq.GetSyncRequests() {
-		p.vtapIDToShareGPIDReq.updateReq(req)
+		p.vtapIdToShareGPIDReq.updateReq(req)
 	}
 }
 
@@ -485,7 +627,7 @@ func (p *ProcessInfo) GetGPIDShareReqs() *trident.ShareGPIDSyncRequests {
 	reqs := p.sendGPIDReq.getAllReqAndClear()
 	shareSyncReqs := make([]*trident.GPIDSyncRequest, 0, len(reqs))
 	for _, req := range reqs {
-		p.vtapIDToLocalGPIDReq.updateCacheReq(req)
+		p.vtapIdToLocalGPIDReq.updateCacheReq(req)
 		shareSyncReqs = append(shareSyncReqs, req.getReq())
 	}
 	if len(shareSyncReqs) > 0 {
@@ -501,34 +643,30 @@ func (p *ProcessInfo) updateGlobalLocalEntries(data EntryData) {
 	p.globalLocalEntries = data
 }
 
-func (p *ProcessInfo) updateRealClientToRealServer(data RealClientToRealServer) {
+func (p *ProcessInfo) updateRealClientToRealServer(data *utils.U128IDMap) {
 	p.realClientToRealServer = data
 }
 
-func (p *ProcessInfo) GetGlobalEntries() ([]*trident.GlobalGPIDEntry, []*trident.GlobalLoopbackGPIDEntry) {
+func (p *ProcessInfo) GetGlobalEntries() []*trident.GlobalGPIDEntry {
 	return p.globalLocalEntries.getGPIDGlobalData(p)
-}
-
-func (p *ProcessInfo) GetRealGlobalData() []*trident.RealClientToRealServer {
-	return p.realClientToRealServer.getGlobalRealData()
 }
 
 func (p *ProcessInfo) generateGlobalLocalEntries() {
 	globalLocalEntries := NewEntryData()
-	realClientToRealServer := make(RealClientToRealServer)
-	vtapIDs := p.vtapIDToLocalGPIDReq.getKeys()
+	realClientToRealServer := utils.NewU128IDMapNoStats("trisolaris-real-pid", CACHE_SIZE)
+	vtapIds := p.vtapIdToLocalGPIDReq.getKeys()
 	shareFilter := mapset.NewSet()
-	for _, vtapID := range vtapIDs {
-		localCacheReq := p.vtapIDToLocalGPIDReq.getCacheReq(vtapID)
+	for _, vtapId := range vtapIds {
+		localCacheReq := p.vtapIdToLocalGPIDReq.getCacheReq(vtapId)
 		if localCacheReq == nil {
 			continue
 		}
-		shareCacheReq := p.vtapIDToShareGPIDReq.getCacheReq(vtapID)
+		shareCacheReq := p.vtapIdToShareGPIDReq.getCacheReq(vtapId)
 		if shareCacheReq != nil {
 			if shareCacheReq.After(localCacheReq) {
 				continue
 			} else {
-				shareFilter.Add(vtapID)
+				shareFilter.Add(vtapId)
 			}
 		}
 
@@ -537,17 +675,17 @@ func (p *ProcessInfo) generateGlobalLocalEntries() {
 			continue
 		}
 		for _, entry := range req.GetEntries() {
-			globalLocalEntries.addData(vtapID, entry)
-			realClientToRealServer.addData(entry)
+			globalLocalEntries.addData(vtapId, entry, p)
+			p.addRealData(vtapId, entry, realClientToRealServer)
 		}
 	}
 
-	vtapIDs = p.vtapIDToShareGPIDReq.getKeys()
-	for _, vtapID := range vtapIDs {
-		if shareFilter.Contains(vtapID) {
+	vtapIds = p.vtapIdToShareGPIDReq.getKeys()
+	for _, vtapId := range vtapIds {
+		if shareFilter.Contains(vtapId) {
 			continue
 		}
-		req := p.vtapIDToShareGPIDReq.getReq(vtapID)
+		req := p.vtapIdToShareGPIDReq.getReq(vtapId)
 		if req == nil {
 			continue
 		}
@@ -555,8 +693,8 @@ func (p *ProcessInfo) generateGlobalLocalEntries() {
 			continue
 		}
 		for _, entry := range req.GetEntries() {
-			globalLocalEntries.addData(vtapID, entry)
-			realClientToRealServer.addData(entry)
+			globalLocalEntries.addData(vtapId, entry, p)
+			p.addRealData(vtapId, entry, realClientToRealServer)
 		}
 	}
 
@@ -574,11 +712,53 @@ func (p *ProcessInfo) getGPIDInfoFromDB() {
 	for _, process := range processes {
 		newVtapIDAndPIDToGPID.addData(process)
 	}
-	p.vtapIDAndPIDToGPID = newVtapIDAndPIDToGPID
+	p.vtapIdAndPIDToGPID = newVtapIDAndPIDToGPID
 }
 
-func (p *ProcessInfo) GetGPIDResponseByVtapID(vtapID uint32) *trident.GPIDSyncResponse {
-	req, _ := p.GetVTapGPIDReq(vtapID)
+func (p *ProcessInfo) getRipToVipFromDB() {
+	rvData := NewRVData()
+	idTolbListener := make(map[int]*models.LBListener)
+	lbListeners, err := dbmgr.DBMgr[models.LBListener](p.db).Gets()
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	for _, lbListener := range lbListeners {
+		idTolbListener[lbListener.ID] = lbListener
+	}
+
+	lbTargetServers, err := dbmgr.DBMgr[models.LBTargetServer](p.db).Gets()
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	for _, lbTargetServer := range lbTargetServers {
+		if lbListener, ok := idTolbListener[lbTargetServer.LBListenerID]; ok {
+			ripNet := libu.ParserStringIp(lbTargetServer.IP)
+			if ripNet == nil {
+				continue
+			}
+			vips := strings.Split(lbListener.IPs, ",")
+			for _, vip := range vips {
+				vipNet := libu.ParserStringIp(vip)
+				if vipNet == nil {
+					continue
+				}
+				epcId := uint32(lbTargetServer.VPCID)
+				rip := libu.IpToUint32(ripNet)
+				rport := uint32(lbTargetServer.Port)
+				vip := libu.IpToUint32(vipNet)
+				vport := uint32(lbListener.Port)
+				rvData.addData(epcId, rip, rport, vip, vport, convertProto(lbListener.Protocol))
+			}
+		}
+	}
+	p.rvData = rvData
+	log.Info(p.rvData)
+}
+
+func (p *ProcessInfo) GetGPIDResponseByVtapID(vtapId uint32) *trident.GPIDSyncResponse {
+	req, _ := p.GetVTapGPIDReq(vtapId)
 	return p.GetGPIDResponseByReq(req)
 }
 
@@ -590,7 +770,7 @@ func (p *ProcessInfo) GetGPIDResponseByReq(req *trident.GPIDSyncRequest) *triden
 	if len(entries) == 0 {
 		return &trident.GPIDSyncResponse{}
 	}
-	vtapID := req.GetVtapId()
+	vtapId := req.GetVtapId()
 	responseEntries := make([]*trident.GPIDSyncEntry, 0, len(entries))
 	for _, entry := range entries {
 		netnsIndex := entry.GetNetnsIdx()
@@ -611,51 +791,48 @@ func (p *ProcessInfo) GetGPIDResponseByReq(req *trident.GPIDSyncRequest) *triden
 			NetnsIdx:  &netnsIndex,
 		}
 		var gpid0, gpid1, gpidReal uint32
-		if entry.GetPid_0() == 0 {
-			global0 := p.globalLocalEntries.getData(protocol, trident.RoleType_ROLE_CLIENT,
-				entry.GetEpcId_0(), entry.GetPort_0(), entry.GetIpv4_0(), vtapID, netnsIndex)
-			if global0 != nil {
-				gpid0 = p.vtapIDAndPIDToGPID.getData(global0.vtapID, global0.pid)
+		globalEntry := p.globalLocalEntries.getData(entry, p)
+		if entry.GetPid_0() > 0 {
+			gpid0 = p.vtapIdAndPIDToGPID.getData(vtapId, entry.GetPid_0())
+		} else if globalEntry != nil {
+			pid0, vtapId0 := globalEntry.getPid0Data()
+			if pid0 > 0 && vtapId0 > 0 {
+				gpid0 = p.vtapIdAndPIDToGPID.getData(vtapId0, pid0)
 			}
-		} else {
-			gpid0 = p.vtapIDAndPIDToGPID.getData(vtapID, entry.GetPid_0())
+		}
+		if entry.GetPid_1() > 0 {
+			gpid1 = p.vtapIdAndPIDToGPID.getData(vtapId, entry.GetPid_1())
+		} else if globalEntry != nil {
+			pid1, vtapId1 := globalEntry.getPid1Data()
+			if pid1 > 0 && vtapId1 > 0 {
+				gpid1 = p.vtapIdAndPIDToGPID.getData(vtapId1, pid1)
+			}
 		}
 
-		if entry.GetPid_1() == 0 {
-			global1 := p.globalLocalEntries.getData(protocol, trident.RoleType_ROLE_SERVER,
-				entry.GetEpcId_1(), entry.GetPort_1(), entry.GetIpv4_1(), vtapID, netnsIndex)
-			if global1 != nil {
-				gpid1 = p.vtapIDAndPIDToGPID.getData(global1.vtapID, global1.pid)
+		if entry.GetPidReal() > 0 {
+			gpid1 = p.vtapIdAndPIDToGPID.getData(vtapId, entry.GetPidReal())
+		} else if entry.GetPidReal() == 0 && entry.GetIpv4Real() > 0 {
+			if globalEntry != nil {
+				pid, vtapId := globalEntry.getPid0Data()
+				if pid > 0 && vtapId > 0 {
+					gpidReal = p.vtapIdAndPIDToGPID.getData(vtapId, pid)
+				}
 			}
-		} else {
-			gpid1 = p.vtapIDAndPIDToGPID.getData(vtapID, entry.GetPid_1())
-		}
-
-		if entry.GetPidReal() == 0 && entry.GetIpv4Real() > 0 {
-			globalReal := p.globalLocalEntries.getData(protocol, roleReal,
-				entry.GetEpcIdReal(), entry.GetPortReal(), entry.GetIpv4Real(), vtapID, netnsIndex)
-			if globalReal != nil {
-				gpidReal = p.vtapIDAndPIDToGPID.getData(globalReal.vtapID, globalReal.pid)
-			}
-		} else {
-			gpidReal = p.vtapIDAndPIDToGPID.getData(vtapID, entry.GetPidReal())
 		}
 
 		if entry.GetIpv4Real() == 0 {
-			epcIdReal, portReal, ipv4Real := p.realClientToRealServer.getData(entry)
-			if ipv4Real > 0 {
-				globalReal := p.globalLocalEntries.getData(protocol, trident.RoleType_ROLE_SERVER,
-					epcIdReal, portReal, ipv4Real, vtapID, netnsIndex)
-				if globalReal != nil {
-					gpidReal = p.vtapIDAndPIDToGPID.getData(globalReal.vtapID, globalReal.pid)
-				}
+			realServerData := p.getRealData(entry)
+			if realServerData != nil {
+				vtapIdReal, epcIdReal, portReal, ipv4Real, pidReal := realServerData.getData()
 				role := trident.RoleType_ROLE_SERVER
 				responseEntry.EpcIdReal = &epcIdReal
 				responseEntry.Ipv4Real = &ipv4Real
 				responseEntry.PortReal = &portReal
 				responseEntry.RoleReal = &role
+				gpidReal = p.vtapIdAndPIDToGPID.getData(vtapIdReal, pidReal)
 			}
 		}
+
 		responseEntry.Pid_0 = &gpid0
 		responseEntry.Pid_1 = &gpid1
 		responseEntry.PidReal = &gpidReal
@@ -665,18 +842,18 @@ func (p *ProcessInfo) GetGPIDResponseByReq(req *trident.GPIDSyncRequest) *triden
 }
 
 func (p *ProcessInfo) DeleteVTapExpiredData(dbVTapIDs mapset.Set) {
-	cacheVTapIDs := p.vtapIDToLocalGPIDReq.getSetIntKeys()
+	cacheVTapIDs := p.vtapIdToLocalGPIDReq.getSetIntKeys()
 	delVTapIDs := cacheVTapIDs.Difference(dbVTapIDs)
 	for val := range delVTapIDs.Iter() {
-		vtapID := val.(int)
-		p.vtapIDToLocalGPIDReq.deleteData(uint32(vtapID))
+		vtapId := val.(int)
+		p.vtapIdToLocalGPIDReq.deleteData(uint32(vtapId))
 	}
 
-	cacheVTapIDs = p.vtapIDToShareGPIDReq.getSetIntKeys()
+	cacheVTapIDs = p.vtapIdToShareGPIDReq.getSetIntKeys()
 	delVTapIDs = cacheVTapIDs.Difference(dbVTapIDs)
 	for val := range delVTapIDs.Iter() {
-		vtapID := val.(int)
-		p.vtapIDToShareGPIDReq.deleteData(uint32(vtapID))
+		vtapId := val.(int)
+		p.vtapIdToShareGPIDReq.deleteData(uint32(vtapId))
 	}
 }
 
@@ -740,7 +917,7 @@ func (p *ProcessInfo) sendLocalShareEntryData() {
 	grpcConns := p.getLocalControllersConns()
 	if len(grpcConns) == 0 {
 		for _, cacheReq := range p.sendGPIDReq.getAllReqAndClear() {
-			p.vtapIDToLocalGPIDReq.updateCacheReq(cacheReq)
+			p.vtapIdToLocalGPIDReq.updateCacheReq(cacheReq)
 		}
 
 		return
@@ -765,20 +942,25 @@ func (p *ProcessInfo) sendLocalShareEntryData() {
 			}
 			log.Infof("receive gpid sync data from server(%s)", response.GetServerIp())
 			for _, req := range response.GetSyncRequests() {
-				p.vtapIDToShareGPIDReq.updateReq(req)
+				p.vtapIdToShareGPIDReq.updateReq(req)
 			}
 		}(conn)
 	}
 }
 
+func (p *ProcessInfo) getDBData() {
+	p.getGPIDInfoFromDB()
+	p.getRipToVipFromDB()
+}
+
 func (p *ProcessInfo) generateData() {
 	p.sendLocalShareEntryData()
-	p.getGPIDInfoFromDB()
+	p.getDBData()
 	p.generateGlobalLocalEntries()
 }
 
 func (p *ProcessInfo) TimedGenerateGPIDInfo() {
-	p.getGPIDInfoFromDB()
+	p.getDBData()
 	interval := time.Duration(p.config.GPIDRefreshInterval)
 	ticker := time.NewTicker(interval * time.Second).C
 	for {
