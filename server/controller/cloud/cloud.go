@@ -101,6 +101,9 @@ func (c *Cloud) GetBasicInfo() model.BasicInfo {
 func (c *Cloud) GetResource() model.Resource {
 	if c.basicInfo.Type != common.KUBERNETES {
 		if c.resource.ErrorState != 1 || len(c.resource.VMs) == 0 {
+			// TODO(weiqiang): delete log
+			log.Infof("%#v", c.resource.VMs)
+			log.Infof("ErrorState: %d, len(vm)=%d\n", c.resource.ErrorState, len(c.resource.VMs))
 			return model.Resource{
 				ErrorState:   c.resource.ErrorState,
 				ErrorMessage: c.resource.ErrorMessage,
@@ -108,8 +111,14 @@ func (c *Cloud) GetResource() model.Resource {
 		}
 		c.getSubDomainData()
 	}
-	c.resource.Verified = true
+	// TODO(weiqiang): delete log
+	log.Infof("weiqiang: %#v\n", c.resource)
+	log.Infof("resource: %v\n", &c.resource)
 	c.appendResourceProcess()
+	c.resource.Verified = true
+	// TODO(weiqiang): delete log
+	log.Infof("weiqiang: %#v\n", c.resource)
+	log.Infof("resource: %v\n", &c.resource)
 	return c.resource
 }
 
@@ -367,6 +376,8 @@ func (c *Cloud) appendResourceProcess() {
 		return
 	}
 
+	log.Infof("weiqiang: %#v\n", c.resource)
+	log.Infof("resource: %v\n", &c.resource)
 	for _, sProcess := range genesisSyncData.Processes {
 		lcuuid, ok := vtapIDToLcuuid[int(sProcess.VtapID)]
 		if !ok {
@@ -395,4 +406,6 @@ func (c *Cloud) appendResourceProcess() {
 		subDomainResource.Processes = append(subDomainResource.Processes, process)
 		c.resource.SubDomainResources[lcuuid] = subDomainResource
 	}
+	log.Infof("weiqiang: %#v\n", c.resource)
+	log.Infof("resource: %v\n", &c.resource)
 }

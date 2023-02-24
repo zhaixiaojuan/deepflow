@@ -120,6 +120,9 @@ func (r *Recorder) shouldRefresh(cloudData cloudmodel.Resource) bool {
 	}
 	r.domainName = domain.Name
 
+	// TODO(weiqiang): delete log
+	log.Infof("weiqiang: %#v", cloudData)
+	log.Infof("Verified: %v\n", cloudData.Verified)
 	if cloudData.Verified {
 		if len(cloudData.Networks) == 0 || len(cloudData.VInterfaces) == 0 {
 			log.Infof("domain (lcuuid: %s, name: %s) has no networks or vinterfaces, does nothing", r.domainLcuuid, r.domainName)
@@ -137,10 +140,14 @@ func (r *Recorder) shouldRefresh(cloudData cloudmodel.Resource) bool {
 }
 
 func (r *Recorder) runNewRefreshWhole(cloudData cloudmodel.Resource) {
+	// TODO(weiqiang): delete log
+	log.Infof("weiqiang: %#v", cloudData)
 	go func() {
 		// 无论是否会更新资源，需先更新domain及subdomain状态
 		r.updateStateInfo(cloudData)
 
+		// TODO(weiqiang): delete log
+		log.Infof("weiqiang: %#v", cloudData)
 		if !r.shouldRefresh(cloudData) {
 			r.canRefresh <- true
 			return

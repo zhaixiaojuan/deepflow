@@ -70,6 +70,8 @@ func (t *Task) Start() {
 			case <-ticker.C:
 				cd := t.Cloud.GetResource()
 				log.Debugf("domain (%s) cloud data: %+v", t.DomainName, cd)
+				// TODO(weiqiang): delete log
+				log.Infof("weiqiang: %#v", cd)
 				t.Recorder.Refresh(cd)
 			case <-t.tCtx.Done():
 				break LOOP
