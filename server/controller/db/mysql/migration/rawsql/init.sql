@@ -1034,6 +1034,7 @@ CREATE TABLE IF NOT EXISTS `resource_group` (
   `vl2_ids`                 TEXT COMMENT 'vl2 ids separated by ,',
   `epc_id`                  INTEGER,
   `pod_cluster_id`          INTEGER,
+  `pod_namespace_id`        INTEGER,
   `extra_info_ids`          TEXT COMMENT 'resource group extra info ids separated by ,',
   `lb_id`                   INTEGER,
   `lb_listener_id`          INTEGER,
@@ -1049,7 +1050,9 @@ CREATE TABLE IF NOT EXISTS resource_group_extra_info (
     resource_id            INTEGER NOT NULL,
     resource_sub_type      INTEGER,
     pod_namespace_id       INTEGER,
-    resource_name          VARCHAR(256) NOT NULL
+    resource_name          VARCHAR(256) NOT NULL,
+    created_at             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=innodb DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
 TRUNCATE TABLE resource_group_extra_info;
 
