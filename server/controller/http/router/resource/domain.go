@@ -175,7 +175,7 @@ func applyDomainAddtionalResource(c *gin.Context) {
 	var data model.AdditionalResource
 
 	// invalidate request body
-	err = c.ShouldBindBodyWith(&data, binding.JSON)
+	err = c.ShouldBindYAML(&data)
 	if err != nil {
 		BadRequestResponse(c, common.INVALID_PARAMETERS, err.Error())
 		return
