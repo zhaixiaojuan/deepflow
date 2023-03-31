@@ -17,10 +17,13 @@
 package dbwriter
 
 import (
+	"bytes"
+
 	"github.com/deepflowio/deepflow/server/ingester/flow_tag"
 	"github.com/deepflowio/deepflow/server/libs/ckdb"
 	"github.com/deepflowio/deepflow/server/libs/datatype"
 	"github.com/deepflowio/deepflow/server/libs/pool"
+	"github.com/deepflowio/deepflow/server/libs/utils"
 	"github.com/deepflowio/deepflow/server/libs/zerodoc"
 )
 
@@ -43,6 +46,12 @@ type ExtMetrics struct {
 
 	MetricsFloatNames  []string
 	MetricsFloatValues []float64
+
+	// ids for lowcard string
+	VTableNameId        uint32
+	TagNameIds          []uint32
+	TagValueIds         []uint32
+	MetricsFloatNameIds []uint32
 }
 
 func (m *ExtMetrics) DatabaseName() string {
@@ -146,10 +155,45 @@ func (m *ExtMetrics) GenCKTable(cluster, storagePolicy string, ttl int, coldStor
 }
 
 // Check if there is a TagName/TagValue/MetricsName not in fieldCache or fieldValueCache, and store the newly appeared item in cache.
-func (m *ExtMetrics) GenerateNewFlowTags(cache *flow_tag.FlowTagCache) {
+func (m *ExtMetrics) GenerateNewFlowTags(cache *flow_tag.FlowTagCache, idCache *ExtMetricsIdCache, fastpathEnabled bool) {
+	cache.Fields = cache.Fields[:0]
+	cache.FieldValues = cache.FieldValues[:0]
+
 	tableName := m.TableName()
 	if m.VirtualTableName() != "" {
 		tableName = m.VirtualTableName()
+	}
+
+	// fast path
+	if fastpathEnabled && cache.SeriesCache.Limit > 2000000 {
+		seriesName := cache.SeriesCache.Buffers[len(cache.SeriesCache.Buffers)-1]
+		startIndex := seriesName.Len()
+		if startIndex >= 1<<20-2048 {
+			seriesName = &bytes.Buffer{}
+			seriesName.Grow(1 << 20)
+			startIndex = 0
+			cache.SeriesCache.Buffers = append(cache.SeriesCache.Buffers, seriesName)
+		}
+		for _, v := range m.TagValueIds {
+			seriesName.WriteString(idCache.FieldValueUids[v])
+		}
+		seriesName.WriteString(idCache.TableNameUids[m.VTableNameId])
+		for _, v := range m.TagNameIds {
+			seriesName.WriteString(idCache.FieldNameUids[v])
+		}
+		unsafeRefOfSeriesName := utils.String(seriesName.Bytes()[startIndex:])
+		if old, exist := cache.SeriesCache.Cache[unsafeRefOfSeriesName]; exist {
+			seriesName.Truncate(startIndex)
+			if *old+cache.CacheFlushTimeout >= m.Timestamp {
+				// If this series is hot, of course there will be no new tags or fields.
+				return
+			} else {
+				*old = m.Timestamp
+			}
+		} else {
+			v := m.Timestamp
+			cache.SeriesCache.Cache[unsafeRefOfSeriesName] = &v
+		}
 	}
 
 	// reset temporary buffers
@@ -159,18 +203,25 @@ func (m *ExtMetrics) GenerateNewFlowTags(cache *flow_tag.FlowTagCache) {
 		VpcId:   m.UniversalTag.L3EpcID,
 		PodNsId: m.UniversalTag.PodNSID,
 	}
-	cache.Fields = cache.Fields[:0]
-	cache.FieldValues = cache.FieldValues[:0]
+
+	flowTagInfoKey := &cache.FlowTagInfoKeyBuffer
+	flowTagInfoKey.Reset()
+	flowTagInfoKey.SetTableId(m.VTableNameId)
+	flowTagInfoKey.SetVpcId(flowTagInfo.VpcId)
+	flowTagInfoKey.SetPodNsId(flowTagInfo.PodNsId)
 
 	// tags
 	flowTagInfo.FieldType = flow_tag.FieldTag
+	flowTagInfoKey.SetFieldType(flow_tag.FieldTag)
 	for i, name := range m.TagNames {
 		flowTagInfo.FieldName = name
+		flowTagInfoKey.SetFieldNameId(m.TagNameIds[i])
 
 		// tag + value
 		flowTagInfo.FieldValue = m.TagValues[i]
+		flowTagInfoKey.SetFieldValueId(m.TagValueIds[i])
 		v1 := m.Timestamp
-		if old := cache.FieldValueCache.AddOrGet(*flowTagInfo, &v1); old != nil {
+		if old := cache.FieldValueCache.AddOrGet(flowTagInfoKey.Low, flowTagInfoKey.High, &v1); old != nil {
 			oldv, _ := old.(*uint32)
 			if *oldv+cache.CacheFlushTimeout >= m.Timestamp {
 				// If there is no new fieldValue, of course there will be no new field.
@@ -187,8 +238,9 @@ func (m *ExtMetrics) GenerateNewFlowTags(cache *flow_tag.FlowTagCache) {
 
 		// only tag
 		flowTagInfo.FieldValue = ""
+		flowTagInfoKey.SetFieldValueId(0)
 		v2 := m.Timestamp
-		if old := cache.FieldCache.AddOrGet(*flowTagInfo, &v2); old != nil {
+		if old := cache.FieldCache.AddOrGet(flowTagInfoKey.Low, flowTagInfoKey.High, &v2); old != nil {
 			oldv, _ := old.(*uint32)
 			if *oldv+cache.CacheFlushTimeout >= m.Timestamp {
 				continue
@@ -204,11 +256,15 @@ func (m *ExtMetrics) GenerateNewFlowTags(cache *flow_tag.FlowTagCache) {
 
 	// metrics
 	flowTagInfo.FieldType = flow_tag.FieldMetrics
+	flowTagInfoKey.SetFieldType(flow_tag.FieldMetrics)
 	flowTagInfo.FieldValue = ""
-	for _, name := range m.MetricsFloatNames {
+	flowTagInfoKey.SetFieldValueId(0)
+	for i, name := range m.MetricsFloatNames {
 		flowTagInfo.FieldName = name
+		flowTagInfoKey.SetFieldNameId(m.MetricsFloatNameIds[i])
+
 		v := m.Timestamp
-		if old := cache.FieldCache.AddOrGet(*flowTagInfo, &v); old != nil {
+		if old := cache.FieldCache.AddOrGet(flowTagInfoKey.Low, flowTagInfoKey.High, &v); old != nil {
 			oldv, _ := old.(*uint32)
 			if *oldv+cache.CacheFlushTimeout >= m.Timestamp {
 				continue
@@ -231,13 +287,16 @@ func AcquireExtMetrics() *ExtMetrics {
 	return extMetricsPool.Get().(*ExtMetrics)
 }
 
-var emptyUniversalTag = zerodoc.UniversalTag{}
-
 func ReleaseExtMetrics(m *ExtMetrics) {
-	m.UniversalTag = emptyUniversalTag
+	// reset buffer
 	m.TagNames = m.TagNames[:0]
 	m.TagValues = m.TagValues[:0]
 	m.MetricsFloatNames = m.MetricsFloatNames[:0]
 	m.MetricsFloatValues = m.MetricsFloatValues[:0]
+
+	m.TagNameIds = m.TagNameIds[:0]
+	m.TagValueIds = m.TagValueIds[:0]
+	m.MetricsFloatNameIds = m.MetricsFloatNameIds[:0]
+
 	extMetricsPool.Put(m)
 }
