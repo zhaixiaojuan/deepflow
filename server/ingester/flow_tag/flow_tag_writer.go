@@ -50,6 +50,7 @@ type SeriesCache struct {
 	Cache   map[string]*uint32
 	Limit   uint32
 	Buffers []*bytes.Buffer
+	Strings []string
 }
 
 func NewSeriesCache(limit uint32) *SeriesCache {

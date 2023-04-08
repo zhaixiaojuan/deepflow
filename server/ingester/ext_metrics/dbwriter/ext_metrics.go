@@ -192,6 +192,7 @@ func (m *ExtMetrics) GenerateNewFlowTags(cache *flow_tag.FlowTagCache, idCache *
 			}
 		} else {
 			v := m.Timestamp
+			cache.SeriesCache.Strings = append(cache.SeriesCache.Strings, unsafeRefOfSeriesName)
 			cache.SeriesCache.Cache[unsafeRefOfSeriesName] = &v
 		}
 	}
