@@ -12,6 +12,7 @@ import (
 	"github.com/deepflowio/deepflow/server/ingester/pkg/ckwriter"
 	"github.com/deepflowio/deepflow/server/libs/ckdb"
 	"github.com/deepflowio/deepflow/server/libs/hmap/lru"
+
 	//slowlru "github.com/deepflowio/deepflow/server/libs/lru"
 	"github.com/deepflowio/deepflow/server/libs/stats"
 	"github.com/deepflowio/deepflow/server/libs/utils"
@@ -47,19 +48,18 @@ type FlowTagWriter struct {
 }
 
 type SeriesCache struct {
-	Cache   map[string]*uint32
+	Cache   map[string]uint32
 	Limit   uint32
-	Buffers []*bytes.Buffer
+	Buffers []bytes.Buffer
 	Strings []string
 }
 
 func NewSeriesCache(limit uint32) *SeriesCache {
-	buffers := make([]*bytes.Buffer, 1)
-	buffers[0] = &bytes.Buffer{}
+	buffers := make([]bytes.Buffer, 1)
 	buffers[0].Grow(1 << 20)
 
 	return &SeriesCache{
-		Cache:   make(map[string]*uint32),
+		Cache:   make(map[string]uint32),
 		Limit:   limit,
 		Buffers: buffers,
 	}

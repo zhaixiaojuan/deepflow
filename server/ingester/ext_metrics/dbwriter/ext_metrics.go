@@ -169,7 +169,7 @@ func (m *ExtMetrics) GenerateNewFlowTags(cache *flow_tag.FlowTagCache, idCache *
 		seriesName := cache.SeriesCache.Buffers[len(cache.SeriesCache.Buffers)-1]
 		startIndex := seriesName.Len()
 		if startIndex >= 1<<20-2048 {
-			seriesName = &bytes.Buffer{}
+			seriesName = bytes.Buffer{}
 			seriesName.Grow(1 << 20)
 			startIndex = 0
 			cache.SeriesCache.Buffers = append(cache.SeriesCache.Buffers, seriesName)
@@ -184,16 +184,15 @@ func (m *ExtMetrics) GenerateNewFlowTags(cache *flow_tag.FlowTagCache, idCache *
 		unsafeRefOfSeriesName := utils.String(seriesName.Bytes()[startIndex:])
 		if old, exist := cache.SeriesCache.Cache[unsafeRefOfSeriesName]; exist {
 			seriesName.Truncate(startIndex)
-			if *old+cache.CacheFlushTimeout >= m.Timestamp {
+			if old+cache.CacheFlushTimeout >= m.Timestamp {
 				// If this series is hot, of course there will be no new tags or fields.
 				return
 			} else {
-				*old = m.Timestamp
+				cache.SeriesCache.Cache[unsafeRefOfSeriesName] = m.Timestamp
 			}
 		} else {
-			v := m.Timestamp
 			cache.SeriesCache.Strings = append(cache.SeriesCache.Strings, unsafeRefOfSeriesName)
-			cache.SeriesCache.Cache[unsafeRefOfSeriesName] = &v
+			cache.SeriesCache.Cache[unsafeRefOfSeriesName] = m.Timestamp
 		}
 	}
 
