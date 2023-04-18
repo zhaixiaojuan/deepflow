@@ -174,6 +174,7 @@ func (d *Decoder) WriteProcEvent(vtapId uint16, e *pb.ProcEvent) {
 		eventStore.RegionID = uint16(baseInfo.RegionID)
 	}
 	eventStore.AppInstance = strconv.Itoa(int(e.Pid))
+	eventStore.IsIPv4 = true
 
 	d.eventWriter.Write(eventStore)
 }

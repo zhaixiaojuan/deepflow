@@ -196,6 +196,10 @@ func L7FlowLogToExportRequest(l7 *log_data.L7FlowLog, universalTagsManager *Univ
 		} else {
 			setOtherSpanKindHostAndPeer(spanAttrs, l7, tags0, tags1)
 		}
+		putStrWithoutEmpty(spanAttrs, "net.peer.name.test", "1111")
+		putStrWithoutEmpty(spanAttrs, "net.peer.name.test", "2222")
+		putStrWithoutEmpty(spanAttrs, "net.peer.name.test", "3333")
+		putStrWithoutEmpty(spanAttrs, "net.peer.name.test", "4444")
 
 		switch datatype.L7Protocol(l7.L7Protocol) {
 		case datatype.L7_PROTOCOL_DNS:
