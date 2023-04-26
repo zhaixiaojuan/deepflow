@@ -102,7 +102,11 @@ func (p *ServerInstanceInfo) Reload() error {
 			CtrlIp:      proto.String(p.ctlIP),
 			ProcessName: proto.String("server-pod-names-watcher"),
 		}
-		client := trident.NewSynchronizerClient(p.GrpcSession.GetClient())
+		c := p.GrpcSession.GetClient()
+		if c == nil {
+			return fmt.Errorf("can't get grpc client to %s", remote)
+		}
+		client := trident.NewSynchronizerClient(c)
 		response, err = client.AnalyzerSync(ctx, &request)
 		return err
 	})

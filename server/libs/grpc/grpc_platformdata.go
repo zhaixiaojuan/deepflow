@@ -1000,7 +1000,11 @@ func (t *PlatformInfoTable) ReloadMaster() error {
 			Os:                  proto.String(t.runtimeEnv.OS),
 			KernelVersion:       proto.String(t.runtimeEnv.KernelVersion),
 		}
-		client := trident.NewSynchronizerClient(t.GetClient())
+		c := t.GetClient()
+		if c == nil {
+			return fmt.Errorf("can't get grpc client to %s", remote)
+		}
+		client := trident.NewSynchronizerClient(c)
 		// 分析器请求消息接口，用于stream, roze
 		response, err = client.AnalyzerSync(ctx, &request)
 		return err
