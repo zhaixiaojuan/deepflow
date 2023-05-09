@@ -358,7 +358,10 @@ impl Stash {
             global_thread_id: ctx.id as u8 + 1,
             slot_interval,
             inner: HashMap::with_capacity(Self::MIN_STASH_CAPACITY),
-            history_length: [0; Self::HISTORY_RECORD_COUNT].into(),
+            history_length: match ctx.metric_type {
+                MetricsType::SECOND => [0; Self::HISTORY_RECORD_COUNT * 60].into(),
+                _ => [0; Self::HISTORY_RECORD_COUNT].into(),
+            },
             doc_flag,
             context: ctx,
         }
