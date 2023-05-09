@@ -1055,6 +1055,9 @@ impl Flow {
         // 链路追踪统计位置
         let [src_tap_side, dst_tap_side] =
             get_direction(&*self, trident_type, cloud_gateway_traffic);
+        if src_tap_side == Direction::ServerGatewayToClient || dst_tap_side == Direction::ClientGatewayToServer {
+            warn!("Trident type: {:?} Flow: {:?}", trident_type, &*self);
+        }
 
         if src_tap_side != Direction::None && dst_tap_side == Direction::None {
             self.tap_side = src_tap_side.into();
