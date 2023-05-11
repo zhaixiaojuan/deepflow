@@ -143,7 +143,7 @@ func (s *service) ShareGPIDLocalData(ctx context.Context, in *api.ShareGPIDSyncR
 
 func (s *service) GetPrometheusLabelIDs(ctx context.Context, in *api.PrometheusLabelIDsRequest) (*api.PrometheusLabelIDsResponse, error) {
 	// FIXME 6.3 add handler
-	return nil, nil
+	return &api.PrometheusLabelIDsResponse{}, nil
 }
 
 func (s *service) Plugin(r *api.PluginRequest, in api.Synchronizer_PluginServer) error {
