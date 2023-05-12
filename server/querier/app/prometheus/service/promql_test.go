@@ -19,8 +19,9 @@ package service
 import (
 	"testing"
 
-	"github.com/prometheus/prometheus/model/labels"
 	. "github.com/smartystreets/goconvey/convey"
+
+	"github.com/prometheus/prometheus/model/labels"
 )
 
 func TestParseMatchersParam(t *testing.T) {
