@@ -496,3 +496,62 @@ impl FlowLog {
         stats
     }
 }
+
+#[derive(Default)]
+pub struct FlowLogFactory {
+    tcp_perf_pool: Vec<Box<TcpPerf>>,
+}
+
+impl FlowLogFactory {
+    pub fn new_flow_log(
+        &mut self,
+        l4_enabled: bool,
+        l7_enabled: bool,
+        perf_cache: Rc<RefCell<L7PerfCache>>,
+        l4_proto: L4Protocol,
+        l7_protocol_enum: L7ProtocolEnum,
+        is_from_app_tab: bool,
+        counter: Arc<FlowPerfCounter>,
+        server_port: u16,
+        wasm_vm: Option<Rc<RefCell<WasmVm>>>,
+    ) -> Option<FlowLog> {
+        if !l4_enabled && !l7_enabled {
+            return None;
+        }
+        let l4 = if l4_enabled {
+            match l4_proto {
+                L4Protocol::Tcp => {
+                    match self.tcp_perf_pool.pop() {
+                        Some(p) => Some(L4FlowPerfTable::Tcp(p)),
+                        None => Some(L4FlowPerfTable::Tcp(Box::new(TcpPerf::new(counter)))),
+                    }
+                },
+                L4Protocol::Udp => Some(L4FlowPerfTable::Udp(UdpPerf::new())),
+                _ => None,
+            }
+        } else {
+            None
+        };
+
+        Some(FlowLog {
+            l4: l4.map(|o| Box::new(o)),
+            l7_protocol_log_parser: get_parser(l7_protocol_enum.clone()).map(|o| Box::new(o)),
+            perf_cache,
+            l7_protocol_enum,
+            is_from_app: is_from_app_tab,
+            is_success: false,
+            is_skip: false,
+            server_port: server_port,
+            wasm_vm: wasm_vm,
+        })
+    }
+
+    pub fn recycle_flow_log(&mut self, flow_log: FlowLog) {
+        if let Some(p) = flow_log.l4 {
+            if let L4FlowPerfTable::Tcp(mut t) = *p {
+                t.reset();
+                self.tcp_perf_pool.push(t);
+            }
+        }
+    }
+}
