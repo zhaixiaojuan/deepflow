@@ -48,7 +48,7 @@ use crate::{
     handler::PacketHandlerBuilder,
     trident::{Components, RunningMode},
     utils::{
-        cgroups::is_kernel_available_for_cgroup,
+        cgroups::is_kernel_available_for_cgroups,
         environment::{get_ctrl_ip_and_mac, running_in_container},
         logger::RemoteLogConfig,
     },
@@ -163,6 +163,7 @@ pub struct EnvironmentConfig {
     pub thread_threshold: u32,
     pub sys_free_memory_limit: u32,
     pub log_file_size: u32,
+    pub tap_mode: TapMode,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -776,6 +777,7 @@ impl TryFrom<(Config, RuntimeConfig)> for ModuleConfig {
                 thread_threshold: conf.thread_threshold,
                 sys_free_memory_limit: conf.sys_free_memory_limit,
                 log_file_size: conf.log_file_size,
+                tap_mode: conf.tap_mode,
             },
             synchronizer: SynchronizerConfig {
                 sync_interval: Duration::from_secs(conf.sync_interval),
@@ -1148,8 +1150,8 @@ impl ConfigHandler {
 
         if candidate_config.tap_mode != TapMode::Analyzer
             && !running_in_container()
-            && !is_kernel_available_for_cgroup()
-        // In the environment where cgroup is not supported, we need to check free memory
+            && !is_kernel_available_for_cgroups()
+        // In the environment where cgroups is not supported, we need to check free memory
         {
             // Check and send out exceptions in time
             if let Err(e) = free_memory_check(new_config.environment.max_memory, exception_handler)
@@ -1267,8 +1269,8 @@ impl ConfigHandler {
                                 }
                             }
                             _ => {
-                                if !running_in_container() && !is_kernel_available_for_cgroup() {
-                                    // In the environment where cgroup is not supported, we need to check free memory
+                                if !running_in_container() && !is_kernel_available_for_cgroups() {
+                                    // In the environment where cgroups is not supported, we need to check free memory
                                     match free_memory_check(
                                         // fixme: It can skip this check because it has been checked before
                                         handler.candidate_config.environment.max_memory,
@@ -1897,8 +1899,8 @@ impl ConfigHandler {
                 }
                 if handler.candidate_config.tap_mode != TapMode::Analyzer
                     && !running_in_container()
-                    && !is_kernel_available_for_cgroup()
-                // In the environment where cgroup is not supported, we need to check free memory
+                    && !is_kernel_available_for_cgroups()
+                // In the environment where cgroups is not supported, we need to check free memory
                 {
                     match free_memory_check(
                         // fixme: It can skip this check because it has been checked before
