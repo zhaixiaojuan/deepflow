@@ -1302,7 +1302,7 @@ func (i *Issu) renameColumn(connect *sql.DB, cr *ColumnRename) error {
 				log.Infof("db: %s, table: %s info: %s", cr.Db, cr.Table, err)
 			} else {
 				log.Errorf("sql: %s, error: %s", sql, err)
-				return err
+				// return err
 			}
 		}
 	}
@@ -1343,7 +1343,7 @@ func (i *Issu) renameColumn(connect *sql.DB, cr *ColumnRename) error {
 			return nil
 		}
 		log.Error(err)
-		return err
+		//return err
 	}
 	return nil
 }
