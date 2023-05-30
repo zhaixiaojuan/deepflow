@@ -36,5 +36,6 @@ CREATE TABLE IF NOT EXISTS ch_prometheus_metric_app_label_layout (
 -- update db_version to latest, remeber update DB_VERSION_EXPECT in migrate/init.go
 UPDATE db_version SET version='6.3.1.2';
 -- modify end
+ALTER TABLE vtap_group_configuration ADD COLUMN prometheus_http_api_address VARCHAR(128) AFTER external_agent_http_proxy_port;
 
 COMMIT;
