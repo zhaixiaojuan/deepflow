@@ -44,12 +44,12 @@ type Synchronizer struct {
 	working         bool
 	refreshInterval time.Duration
 
-	metricName   *metricName
-	labelName    *labelName
-	labelValue   *labelValue
-	labelLayout  *labelLayout
-	label        *label
-	metricTarget *metricTarget
+	metricName  *metricName
+	labelName   *labelName
+	labelValue  *labelValue
+	labelLayout *labelLayout
+	label       *label
+	metricLabel *metricLabel
 }
 
 func GetSingleton() *Synchronizer {
@@ -69,7 +69,7 @@ func (m *Synchronizer) Init(ctx context.Context, cfg *prometheuscfg.Config) {
 	m.labelValue = newLabelValue(cfg.ResourceMaxID1)
 	m.label = newLabel()
 	m.labelLayout = newLabelLayout()
-	m.metricTarget = newMetricTarget()
+	m.metricLabel = newMetricLabel(m.label)
 	m.refreshInterval = time.Duration(cfg.CacheRefreshInterval) * time.Second
 	return
 }
@@ -109,25 +109,25 @@ func (m *Synchronizer) Stop() {
 }
 
 func (m *Synchronizer) refresh() error {
+	m.label.refresh()
 	eg, ctx := errgroup.WithContext(m.ctx)
 	AppendErrGroupWithContext(ctx, eg, m.metricName.refresh)
 	AppendErrGroupWithContext(ctx, eg, m.labelName.refresh)
 	AppendErrGroupWithContext(ctx, eg, m.labelValue.refresh)
-	AppendErrGroupWithContext(ctx, eg, m.label.refresh)
 	AppendErrGroupWithContext(ctx, eg, m.labelLayout.refresh)
-	AppendErrGroupWithContext(ctx, eg, m.metricTarget.refresh)
+	AppendErrGroupWithContext(ctx, eg, m.metricLabel.refresh)
 	return eg.Wait()
 }
 
 func (m *Synchronizer) Sync(req *controller.SyncPrometheusRequest) (*controller.SyncPrometheusResponse, error) {
-	eg, ctx := errgroup.WithContext(m.ctx)
 	resp := new(controller.SyncPrometheusResponse)
+	m.syncLabel(resp, req.GetLabels())
+	eg, ctx := errgroup.WithContext(m.ctx)
 	AppendErrGroupWithContext(ctx, eg, m.syncMetricName, resp, req.GetMetricNames())
 	AppendErrGroupWithContext(ctx, eg, m.syncLabelName, resp, req.GetLabelNames())
 	AppendErrGroupWithContext(ctx, eg, m.syncLabelValue, resp, req.GetLabelValues())
 	AppendErrGroupWithContext(ctx, eg, m.syncLabelIndex, resp, req.GetMetricAppLabelLayouts())
-	AppendErrGroupWithContext(ctx, eg, m.syncLabel, req.GetLabels())
-	AppendErrGroupWithContext(ctx, eg, m.syncMetricTarget, req.GetMetricTargets())
+	AppendErrGroupWithContext(ctx, eg, m.syncMetricLabel, req.GetMetricLabels())
 	err := eg.Wait()
 	return resp, err
 }
@@ -177,17 +177,19 @@ func (m *Synchronizer) syncLabelIndex(args ...interface{}) error {
 }
 
 func (m *Synchronizer) syncLabel(args ...interface{}) error {
-	labels := args[0].([]*controller.PrometheusLabel)
-	err := m.label.sync(labels)
+	resp := args[0].(*controller.SyncPrometheusResponse)
+	labels := args[1].([]*controller.PrometheusLabelRequest)
+	ls, err := m.label.sync(labels)
 	if err != nil {
 		return err
 	}
+	resp.Labels = ls
 	return nil
 }
 
-func (m *Synchronizer) syncMetricTarget(args ...interface{}) error {
-	targets := args[0].([]*controller.PrometheusMetricTarget)
-	err := m.metricTarget.sync(targets)
+func (m *Synchronizer) syncMetricLabel(args ...interface{}) error {
+	mls := args[0].([]*controller.PrometheusMetricLabelRequest)
+	err := m.metricLabel.sync(mls)
 	if err != nil {
 		return err
 	}

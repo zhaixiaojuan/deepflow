@@ -22,82 +22,84 @@ import (
 	"github.com/deepflowio/deepflow/message/controller"
 	"github.com/deepflowio/deepflow/server/controller/db/mysql"
 	"github.com/deepflowio/deepflow/server/controller/side/prometheus/cache"
+	"github.com/golang/protobuf/proto"
 )
 
 type label struct {
-	mux          sync.Mutex
 	resourceType string
-	labels       map[cache.LabelKey]struct{}
+	labelKeyToID sync.Map
+	labelIDToKey sync.Map
 }
 
 func newLabel() *label {
 	return &label{
 		resourceType: "label",
-		labels:       make(map[cache.LabelKey]struct{}),
 	}
 }
 
-func (l *label) refresh(args ...interface{}) error {
-	l.mux.Lock()
-	defer l.mux.Unlock()
+func (l *label) store(item *mysql.PrometheusLabel) {
+	l.labelKeyToID.Store(cache.NewLabelKey(item.Name, item.Value), item.ID)
+	l.labelIDToKey.Store(item.ID, cache.NewLabelKey(item.Name, item.Value))
+}
 
+func (l *label) getKey(id int) (cache.LabelKey, bool) {
+	if item, ok := l.labelIDToKey.Load(id); ok {
+		return item.(cache.LabelKey), true
+	}
+	return cache.LabelKey{}, false
+}
+
+func (l *label) getID(key cache.LabelKey) (int, bool) {
+	if item, ok := l.labelKeyToID.Load(key); ok {
+		return item.(int), true
+	}
+	return 0, false
+}
+
+func (l *label) refresh(args ...interface{}) error {
 	var ls []*mysql.PrometheusLabel
 	err := mysql.Db.Find(&ls).Error
 	if err != nil {
 		return err
 	}
 	for _, item := range ls {
-		l.labels[cache.NewLabelKey(item.Name, item.Value)] = struct{}{}
+		l.store(item)
 	}
 	return nil
 }
 
-func (l *label) sync(toAdd []*controller.PrometheusLabel) error {
-	l.mux.Lock()
-	defer l.mux.Unlock()
-
+func (l *label) sync(toAdd []*controller.PrometheusLabelRequest) ([]*controller.PrometheusLabel, error) {
+	resp := make([]*controller.PrometheusLabel, 0)
 	var dbToAdd []*mysql.PrometheusLabel
 	for _, item := range toAdd {
 		n := item.GetName()
 		v := item.GetValue()
-		if _, ok := l.labels[cache.NewLabelKey(n, v)]; !ok {
-			dbToAdd = append(dbToAdd, &mysql.PrometheusLabel{
-				Name:  n,
-				Value: v,
+		if id, ok := l.getID(cache.NewLabelKey(n, v)); ok {
+			resp = append(resp, &controller.PrometheusLabel{
+				Name:  &n,
+				Value: &v,
+				Id:    proto.Uint32(uint32(id)),
 			})
 		}
+		dbToAdd = append(dbToAdd, &mysql.PrometheusLabel{
+			Name:  n,
+			Value: v,
+		})
 	}
 
-	err := l.addBatch(dbToAdd)
+	err := addBatch(dbToAdd, l.resourceType)
 	if err != nil {
 		log.Errorf("add %s error: %s", l.resourceType, err.Error())
-		return err
+		return nil, err
 	}
 	for _, item := range dbToAdd {
-		l.labels[cache.NewLabelKey(item.Name, item.Value)] = struct{}{}
-	}
-	return nil
-}
+		l.store(item)
+		resp = append(resp, &controller.PrometheusLabel{
+			Name:  &item.Name,
+			Value: &item.Value,
+			Id:    proto.Uint32(uint32(item.ID)),
+		})
 
-func (l *label) addBatch(toAdd []*mysql.PrometheusLabel) error {
-	count := len(toAdd)
-	offset := 1000
-	pages := count/offset + 1
-	if count%offset == 0 {
-		pages = count / offset
 	}
-	for i := 0; i < pages; i++ {
-		start := i * offset
-		end := (i + 1) * offset
-		if end > count {
-			end = count
-		}
-		oneP := toAdd[start:end]
-		err := mysql.Db.Create(&oneP).Error
-		if err != nil {
-			return err
-		}
-		log.Infof("add %d %s success", len(oneP), l.resourceType)
-	}
-	return nil
+	return resp, nil
 }

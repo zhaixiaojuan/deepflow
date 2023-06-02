@@ -46,32 +46,32 @@ func newLabelName(max int) *labelName {
 	}
 }
 
-func (p *labelName) load() (ids mapset.Set[int], err error) {
+func (ln *labelName) load() (ids mapset.Set[int], err error) {
 	var items []*mysql.PrometheusLabelName
 	err = mysql.Db.Find(&items).Error
 	if err != nil {
-		log.Errorf("db query %s failed: %v", p.resourceType, err)
+		log.Errorf("db query %s failed: %v", ln.resourceType, err)
 		return nil, err
 	}
 	inUseIDsSet := mapset.NewSet[int]()
 	for _, item := range items {
 		inUseIDsSet.Add(item.ID)
-		p.strToID[item.Name] = item.ID
+		ln.strToID[item.Name] = item.ID
 	}
 	return inUseIDsSet, nil
 }
 
-func (p *labelName) refresh(args ...interface{}) error {
-	log.Infof("refresh %s id pools started", p.resourceType)
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
+func (ln *labelName) refresh(args ...interface{}) error {
+	log.Infof("refresh %s id pools started", ln.resourceType)
+	ln.mutex.Lock()
+	defer ln.mutex.Unlock()
 
-	inUseIDsSet, err := p.load()
+	inUseIDsSet, err := ln.load()
 	if err != nil {
 		return err
 	}
 	allIDsSet := mapset.NewSet[int]()
-	for i := 1; i <= p.Max; i++ {
+	for i := 1; i <= ln.Max; i++ {
 		allIDsSet.Add(i)
 	}
 	// 可用ID = 所有ID（1~max）- db中正在使用的ID
@@ -102,73 +102,73 @@ func (p *labelName) refresh(args ...interface{}) error {
 		usableIDs = allIDsSet.ToSlice()
 		sort.IntSlice(usableIDs).Sort()
 	}
-	p.usableIDs = usableIDs
+	ln.usableIDs = usableIDs
 
-	log.Infof("refresh %s id pools (usable ids count: %d) completed", p.resourceType, len(p.usableIDs))
+	log.Infof("refresh %s id pools (usable ids count: %d) completed", ln.resourceType, len(ln.usableIDs))
 	return nil
 }
 
 // 批量分配ID，若ID池中数量不足，分配ID池所有ID；反之分配指定个数ID。
 // 分配的ID中，若已有被实际使用的ID（闭源页面创建使用），排除已使用ID，仅分配剩余部分。
-func (p *labelName) allocate(count int) (ids []int, err error) {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
+func (ln *labelName) allocate(count int) (ids []int, err error) {
+	ln.mutex.Lock()
+	defer ln.mutex.Unlock()
 
-	if len(p.usableIDs) == 0 {
-		log.Errorf("%s has no more usable ids", p.resourceType)
+	if len(ln.usableIDs) == 0 {
+		log.Errorf("%s has no more usable ids", ln.resourceType)
 		return
 	}
 
-	if len(p.usableIDs) < count {
+	if len(ln.usableIDs) < count {
 		return nil, errors.New("no more usable ids")
 	}
 	ids = make([]int, count)
-	copy(ids, p.usableIDs[:count])
+	copy(ids, ln.usableIDs[:count])
 
-	inUseIDs, err := p.check(ids)
+	inUseIDs, err := ln.check(ids)
 	if err != nil {
 		return
 	}
 	if len(inUseIDs) != 0 {
 		return nil, errors.New("some ids are in use")
 	}
-	log.Infof("allocate %s ids: %v (expected count: %d, true count: %d)", p.resourceType, ids, count, len(ids))
-	p.usableIDs = p.usableIDs[count:]
+	log.Infof("allocate %s ids: %v (expected count: %d, true count: %d)", ln.resourceType, ids, count, len(ids))
+	ln.usableIDs = ln.usableIDs[count:]
 	return
 }
 
-func (p *labelName) check(ids []int) (inUseIDs []int, err error) {
+func (ln *labelName) check(ids []int) (inUseIDs []int, err error) {
 	var dbItems []*mysql.PrometheusLabelName
 	err = mysql.Db.Unscoped().Where("id IN ?", ids).Find(&dbItems).Error
 	if err != nil {
-		log.Errorf("db query %s failed: %v", p.resourceType, err)
+		log.Errorf("db query %s failed: %v", ln.resourceType, err)
 		return
 	}
 	if len(dbItems) != 0 {
 		for _, item := range dbItems {
 			inUseIDs = append(inUseIDs, item.ID)
 		}
-		log.Infof("%s ids: %+v are in use.", p.resourceType, inUseIDs)
+		log.Infof("%s ids: %+v are in use.", ln.resourceType, inUseIDs)
 	}
 	return
 }
 
-func (p *labelName) sync(strs []string) ([]*controller.PrometheusLabelName, error) {
+func (ln *labelName) sync(strs []string) ([]*controller.PrometheusLabelName, error) {
 	resp := make([]*controller.PrometheusLabelName, 0)
 	dbToAdd := make([]*mysql.PrometheusLabelName, 0)
 	var countToAllocate int
 	for _, str := range strs {
-		if _, ok := p.strToID[str]; !ok {
+		if _, ok := ln.strToID[str]; !ok {
 			countToAllocate++
 			dbToAdd = append(dbToAdd, &mysql.PrometheusLabelName{Name: str})
 			continue
 		}
-		resp = append(resp, &controller.PrometheusLabelName{Name: &str, Id: proto.Uint32(uint32(p.strToID[str]))})
+		resp = append(resp, &controller.PrometheusLabelName{Name: &str, Id: proto.Uint32(uint32(ln.strToID[str]))})
 	}
 	if countToAllocate == 0 {
 		return resp, nil
 	}
-	ids, err := p.allocate(countToAllocate)
+	ids, err := ln.allocate(countToAllocate)
 	if err != nil {
 		return nil, err
 	}
@@ -176,36 +176,13 @@ func (p *labelName) sync(strs []string) ([]*controller.PrometheusLabelName, erro
 		dbToAdd[i].ID = ids[i]
 		resp = append(resp, &controller.PrometheusLabelName{Name: &dbToAdd[i].Name, Id: proto.Uint32(uint32(dbToAdd[i].ID))})
 	}
-	err = p.addBatch(dbToAdd)
+	err = addBatch(dbToAdd, ln.resourceType)
 	if err != nil {
-		log.Errorf("add %s error: %s", p.resourceType, err.Error())
+		log.Errorf("add %s error: %s", ln.resourceType, err.Error())
 		return nil, err
 	}
 	for _, item := range dbToAdd {
-		p.strToID[item.Name] = item.ID
+		ln.strToID[item.Name] = item.ID
 	}
 	return resp, nil
-}
-
-func (p *labelName) addBatch(toAdd []*mysql.PrometheusLabelName) error {
-	count := len(toAdd)
-	offset := 1000
-	pages := count/offset + 1
-	if count%offset == 0 {
-		pages = count / offset
-	}
-	for i := 0; i < pages; i++ {
-		start := i * offset
-		end := (i + 1) * offset
-		if end > count {
-			end = count
-		}
-		oneP := toAdd[start:end]
-		err := mysql.Db.Create(&oneP).Error
-		if err != nil {
-			return err
-		}
-		log.Infof("add %d %s success", len(oneP), p.resourceType)
-	}
-	return nil
 }

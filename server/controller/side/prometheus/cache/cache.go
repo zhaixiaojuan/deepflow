@@ -47,21 +47,21 @@ type Cache struct {
 	MetricAndAPPLabelLayout *metricAndAPPLabelLayout
 	Target                  *target
 	Label                   *label
-	MetricTarget            *metricTarget
+	MetricLabel             *metricLabel
 }
 
 func GetSingletonCache() *Cache {
 	cacheOnce.Do(func() {
-		tgt := &target{}
+		l := &label{}
 		cacheIns = &Cache{
 			canRefresh:              make(chan bool, 1),
 			MetricName:              &metricName{},
 			LabelName:               &labelName{},
 			LabelValue:              &labelValue{},
 			MetricAndAPPLabelLayout: &metricAndAPPLabelLayout{},
-			Target:                  tgt,
-			Label:                   &label{},
-			MetricTarget:            newMetricTarget(tgt),
+			Target:                  &target{},
+			Label:                   l,
+			MetricLabel:             newMetricLabel(l),
 		}
 	})
 	return cacheIns
@@ -170,12 +170,12 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 			content["label"] = temp
 		}
 	}
-	getMetricTarget := func() {
+	getMetricLabel := func() {
 		temp := map[string]interface{}{
 			"metric_name_to_target_id": make(map[string]interface{}),
 		}
 		// TODO fix this
-		// tempCache.MetricTarget.metricNameToTargetID.Range(func(key, value any) bool {
+		// tempCache.MetricLabel.metricNameToTargetID.Range(func(key, value any) bool {
 		// 	temp["metric_name_to_target_id"].(map[string]interface{})[key.(string)] = value
 		// 	return true
 		// })
@@ -192,7 +192,7 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 		getMetricAndAppLabelLayout()
 		getTarget()
 		getLabel()
-		getMetricTarget()
+		getMetricLabel()
 	case controller.PrometheusCacheType_METRIC_NAME:
 		getMetricName()
 	case controller.PrometheusCacheType_LABEL_NAME:
@@ -206,7 +206,7 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 	case controller.PrometheusCacheType_LABEL:
 		getLabel()
 	case controller.PrometheusCacheType_METRIC_TARGET:
-		getMetricTarget()
+		getMetricLabel()
 	default:
 		return nil
 	}
@@ -241,14 +241,14 @@ func (t *Cache) Start(ctx context.Context) error {
 
 func (t *Cache) refresh(fully bool) error {
 	log.Info("refresh cache started")
-	t.Target.refresh()
+	t.Label.refresh(fully)
 	eg := &errgroup.Group{}
 	AppendErrGroup(eg, t.MetricName.refresh, fully)
 	AppendErrGroup(eg, t.LabelName.refresh, fully)
 	AppendErrGroup(eg, t.LabelValue.refresh, fully)
 	AppendErrGroup(eg, t.MetricAndAPPLabelLayout.refresh, fully)
-	AppendErrGroup(eg, t.Label.refresh, fully)
-	AppendErrGroup(eg, t.MetricTarget.refresh, fully)
+	AppendErrGroup(eg, t.MetricLabel.refresh, fully)
+	AppendErrGroup(eg, t.Target.refresh, fully)
 	err := eg.Wait()
 	log.Info("refresh cache completed")
 	return err
@@ -263,5 +263,5 @@ func (t *Cache) RefreshFully() error {
 
 func (t *Cache) Clear() {
 	t.MetricAndAPPLabelLayout.clear()
-	t.MetricTarget.clear()
+	t.MetricLabel.clear()
 }

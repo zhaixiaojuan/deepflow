@@ -64,7 +64,13 @@ type PrometheusLabel struct {
 	Value   string `gorm:"column:value;type:varchar(256);not null"`
 }
 
-type PrometheusMetricTarget struct {
+type PrometheusMetricLabel struct {
+	IDField    `gorm:"embedded"`
+	MetricName string `gorm:"column:metric_name;type:varchar(256);not null"`
+	LabelID    int    `gorm:"column:label_id;type:int(10) unsigned;not null"`
+}
+
+type PrometheusMetricTarget struct { // TODO delete
 	IDField    `gorm:"embedded"`
 	MetricName string `gorm:"column:metric_name;type:varchar(256);not null"`
 	TargetID   int    `gorm:"column:target_id;type:int(10) unsigned;not null"`
@@ -74,7 +80,6 @@ type PrometheusMetricAPPLabelLayout struct {
 	IDField             `gorm:"embedded"`
 	MetricName          string `gorm:"column:metric_name;type:varchar(256);not null"`
 	APPLabelName        string `gorm:"column:app_label_name;type:varchar(256);not null"`
-	APPLabelValue       string `gorm:"column:app_label_value;type:varchar(256);not null"`
 	APPLabelColumnIndex uint8  `gorm:"column:app_label_column_index;type:tinyint(3) unsigned;not null"`
 }
 

@@ -32,13 +32,13 @@ func NewEncoderEvent() *EncoderEvent {
 	return &EncoderEvent{}
 }
 
-func (e *EncoderEvent) GetLabelIDs(ctx context.Context, in *trident.PrometheusLabelIDsRequest) (*trident.PrometheusLabelIDsResponse, error) {
-	log.Debugf("GetLabelIDsRequest: %+v", in)
-	resp, err := prometheus.NewEncoder().Encode(in.GetRequestLabels())
+func (e *EncoderEvent) GetLabelIDs(ctx context.Context, in *trident.PrometheusLabelRequest) (*trident.PrometheusLabelResponse, error) {
+	log.Debugf("PrometheusLabelRequest: %+v", in)
+	resp, err := prometheus.NewEncoder().Encode(in)
 	if err != nil {
 		log.Errorf("encode str error: %+v", err)
-		return &trident.PrometheusLabelIDsResponse{}, nil
+		return &trident.PrometheusLabelResponse{}, nil
 	}
-	log.Debugf("GetLabelIDsResponse: %v+", resp)
-	return &trident.PrometheusLabelIDsResponse{ResponseLabelIds: resp}, err
+	log.Debugf("PrometheusLabelResponse: %+v", resp)
+	return resp, err
 }

@@ -45,8 +45,11 @@ type targetLabelNameToValue map[string]string
 
 type target struct {
 	keyToTargetID              sync.Map
-	targetIDToKey              sync.Map
 	targetIDToLabelNameToValue sync.Map
+}
+
+func (t *target) Get() *sync.Map {
+	return &t.keyToTargetID
 }
 
 func (t *target) GetTargetLabelNameToValueByTargetID(i int) targetLabelNameToValue {
@@ -56,30 +59,25 @@ func (t *target) GetTargetLabelNameToValueByTargetID(i int) targetLabelNameToVal
 	return make(targetLabelNameToValue)
 }
 
-func (t *target) GetTargetIDByTargetKey(key TargetKey) (int, bool) {
+func (t *target) GetIDByTargetKey(key TargetKey) (int, bool) {
 	if id, ok := t.keyToTargetID.Load(key); ok {
 		return id.(int), true
 	}
 	return 0, false
 }
 
-func (t *target) GetTargetKeyByTargetID(id int) (TargetKey, bool) {
-	if key, ok := t.targetIDToKey.Load(id); ok {
-		return key.(TargetKey), true
-	}
-	return TargetKey{}, false
-}
-
-func (t *target) refresh() error {
+func (t *target) refresh(args ...interface{}) error {
 	targets, err := t.load()
 	if err != nil {
 		return err
 	}
-	for _, tg := range targets {
-		key := NewTargetKey(tg.Instance, tg.Job)
-		t.keyToTargetID.Store(key, tg.ID)
-		t.targetIDToKey.Store(tg.ID, key)
-		t.targetIDToLabelNameToValue.Store(tg.ID, t.formatLabels(tg))
+	fully := args[0].(bool)
+	for _, item := range targets {
+		key := NewTargetKey(item.Instance, item.Job)
+		t.keyToTargetID.Store(key, item.ID)
+		if !fully {
+			t.targetIDToLabelNameToValue.Store(item.ID, t.formatLabels(item))
+		}
 	}
 	return nil
 }

@@ -19,6 +19,7 @@ package cache
 import (
 	"sync"
 
+	"github.com/deepflowio/deepflow/message/controller"
 	"github.com/deepflowio/deepflow/server/controller/db/mysql"
 )
 
@@ -35,34 +36,44 @@ func NewLabelKey(name, value string) LabelKey {
 }
 
 type label struct {
-	keyMap sync.Map
+	keyMap  sync.Map
+	idToKey sync.Map
 }
 
-func (t *label) GetKey(key LabelKey) bool {
-	if _, ok := t.keyMap.Load(key); ok {
+func (l *label) IfKeyExists(key LabelKey) bool {
+	if _, ok := l.keyMap.Load(key); ok {
 		return true
 	}
 	return false
 }
 
-func (t *label) Add(batch []LabelKey) {
-	for _, m := range batch {
-		t.keyMap.Store(m, struct{}{})
+func (l *label) GetKeyByID(id int) (LabelKey, bool) {
+	if item, ok := l.idToKey.Load(id); ok {
+		return item.(LabelKey), true
+	}
+	return LabelKey{}, false
+}
+
+func (l *label) Add(batch []*controller.PrometheusLabel) {
+	for _, item := range batch {
+		l.keyMap.Store(NewLabelKey(item.GetName(), item.GetValue()), struct{}{})
+		l.idToKey.Store(item.GetId(), NewLabelKey(item.GetName(), item.GetValue()))
 	}
 }
 
-func (t *label) refresh(args ...interface{}) error {
-	labelKeys, err := t.load()
+func (l *label) refresh(args ...interface{}) error {
+	ls, err := l.load()
 	if err != nil {
 		return err
 	}
-	for _, lk := range labelKeys {
-		t.keyMap.Store(lk, struct{}{})
+	for _, item := range ls {
+		l.keyMap.Store(NewLabelKey(item.Name, item.Value), struct{}{})
+		l.idToKey.Store(item.ID, NewLabelKey(item.Name, item.Value))
 	}
 	return nil
 }
 
-func (t *label) load() ([]*mysql.PrometheusLabel, error) {
+func (l *label) load() ([]*mysql.PrometheusLabel, error) {
 	var labels []*mysql.PrometheusLabel
 	err := mysql.Db.Find(&labels).Error
 	return labels, err

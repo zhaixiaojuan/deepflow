@@ -27,31 +27,31 @@ type labelName struct {
 	nameToID sync.Map
 }
 
-func (t *labelName) GetIDByName(n string) (int, bool) {
-	if id, ok := t.nameToID.Load(n); ok {
+func (ln *labelName) GetIDByName(n string) (int, bool) {
+	if id, ok := ln.nameToID.Load(n); ok {
 		return id.(int), true
 	}
 	return 0, false
 }
 
-func (t *labelName) Add(batch []*controller.PrometheusLabelName) {
-	for _, m := range batch {
-		t.nameToID.Store(m.GetName(), int(m.GetId()))
+func (ln *labelName) Add(batch []*controller.PrometheusLabelName) {
+	for _, item := range batch {
+		ln.nameToID.Store(item.GetName(), int(item.GetId()))
 	}
 }
 
-func (t *labelName) refresh(args ...interface{}) error {
-	labelNames, err := t.load()
+func (ln *labelName) refresh(args ...interface{}) error {
+	labelNames, err := ln.load()
 	if err != nil {
 		return err
 	}
-	for _, ln := range labelNames {
-		t.nameToID.Store(ln.Name, ln.ID)
+	for _, item := range labelNames {
+		ln.nameToID.Store(item.Name, item.ID)
 	}
 	return nil
 }
 
-func (t *labelName) load() ([]*mysql.PrometheusLabelName, error) {
+func (ln *labelName) load() ([]*mysql.PrometheusLabelName, error) {
 	var labelNames []*mysql.PrometheusLabelName
 	err := mysql.Db.Find(&labelNames).Error
 	return labelNames, err

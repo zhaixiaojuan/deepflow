@@ -148,7 +148,7 @@ func (s *service) ShareGPIDLocalData(ctx context.Context, in *api.ShareGPIDSyncR
 	return s.processInfoEvent.ShareGPIDLocalData(ctx, in)
 }
 
-func (s *service) GetPrometheusLabelIDs(ctx context.Context, in *api.PrometheusLabelIDsRequest) (*api.PrometheusLabelIDsResponse, error) {
+func (s *service) GetPrometheusLabelIDs(ctx context.Context, in *api.PrometheusLabelRequest) (*api.PrometheusLabelResponse, error) {
 	return s.prometheusEvent.GetLabelIDs(ctx, in)
 }
 

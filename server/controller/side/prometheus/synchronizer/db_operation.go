@@ -14,20 +14,32 @@
  * limitations under the License.
  */
 
-package constraint
+package synchronizer
 
 import (
 	"github.com/deepflowio/deepflow/server/controller/db/mysql"
+	"github.com/deepflowio/deepflow/server/controller/side/prometheus/constraint"
 )
 
-type StrIDModel interface {
-	mysql.PrometheusMetricName | mysql.PrometheusLabelName | mysql.PrometheusLabelValue
-
-	GetID() int
-	GetStr() string
-}
-
-type OperateBatchModel interface {
-	mysql.PrometheusMetricName | mysql.PrometheusLabelName | mysql.PrometheusLabelValue | mysql.PrometheusMetricAPPLabelLayout |
-		mysql.PrometheusLabel | mysql.PrometheusMetricLabel
+func addBatch[T constraint.OperateBatchModel](toAdd []*T, resourceType string) error {
+	count := len(toAdd)
+	offset := 1000
+	pages := count/offset + 1
+	if count%offset == 0 {
+		pages = count / offset
+	}
+	for i := 0; i < pages; i++ {
+		start := i * offset
+		end := (i + 1) * offset
+		if end > count {
+			end = count
+		}
+		oneP := toAdd[start:end]
+		err := mysql.Db.Create(&oneP).Error
+		if err != nil {
+			return err
+		}
+		log.Infof("add %d %s success", len(oneP), resourceType)
+	}
+	return nil
 }

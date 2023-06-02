@@ -26,14 +26,12 @@ import (
 type LayoutKey struct {
 	MetricName string `json:"metric_name"`
 	LabelName  string `json:"label_name"`
-	LabelValue string `json:"label_value"`
 }
 
-func NewLayoutKey(metricName, labelName, labelValue string) LayoutKey {
+func NewLayoutKey(metricName, labelName string) LayoutKey {
 	return LayoutKey{
 		MetricName: metricName,
 		LabelName:  labelName,
-		LabelValue: labelValue,
 	}
 }
 
@@ -44,46 +42,45 @@ type metricAndAPPLabelLayout struct {
 	metricNameToAPPLabelNameToValue map[string]appLabelNameToValue // only for fully assembled
 }
 
-func (t *metricAndAPPLabelLayout) GetAPPLabelNameToValueByMetricName(n string) appLabelNameToValue {
-	return t.metricNameToAPPLabelNameToValue[n]
+func (mll *metricAndAPPLabelLayout) GetAPPLabelNameToValueByMetricName(n string) appLabelNameToValue {
+	return mll.metricNameToAPPLabelNameToValue[n]
 }
 
-func (t *metricAndAPPLabelLayout) GetIndexByLayoutKey(key LayoutKey) (uint8, bool) {
-	if index, ok := t.layoutKeyToIndex.Load(key); ok {
+func (mll *metricAndAPPLabelLayout) GetIndexByLayoutKey(key LayoutKey) (uint8, bool) {
+	if index, ok := mll.layoutKeyToIndex.Load(key); ok {
 		return index.(uint8), true
 	}
 	return 0, false
 }
 
-func (t *metricAndAPPLabelLayout) Add(batch []*controller.PrometheusMetricAPPLabelLayout) {
+func (mll *metricAndAPPLabelLayout) Add(batch []*controller.PrometheusMetricAPPLabelLayout) {
 	for _, m := range batch {
-		t.layoutKeyToIndex.Store(NewLayoutKey(m.GetMetricName(), m.GetAppLabelName(), m.GetAppLabelValue()), uint8(m.GetAppLabelColumnIndex()))
+		mll.layoutKeyToIndex.Store(NewLayoutKey(m.GetMetricName(), m.GetAppLabelName()), uint8(m.GetAppLabelColumnIndex()))
 	}
 }
 
-func (t *metricAndAPPLabelLayout) clear() {
-	t.metricNameToAPPLabelNameToValue = make(map[string]appLabelNameToValue)
+func (mll *metricAndAPPLabelLayout) clear() {
+	mll.metricNameToAPPLabelNameToValue = make(map[string]appLabelNameToValue)
 }
 
-func (t *metricAndAPPLabelLayout) refresh(args ...interface{}) error {
-	metricAPPLabelLayouts, err := t.load()
+func (mll *metricAndAPPLabelLayout) refresh(args ...interface{}) error {
+	metricAPPLabelLayouts, err := mll.load()
 	if err != nil {
 		return err
 	}
 	fully := args[0].(bool)
 	for _, l := range metricAPPLabelLayouts {
 		if fully {
-			if _, ok := t.metricNameToAPPLabelNameToValue[l.MetricName]; !ok {
-				t.metricNameToAPPLabelNameToValue[l.MetricName] = make(appLabelNameToValue)
+			if _, ok := mll.metricNameToAPPLabelNameToValue[l.MetricName]; !ok {
+				mll.metricNameToAPPLabelNameToValue[l.MetricName] = make(appLabelNameToValue)
 			}
-			t.metricNameToAPPLabelNameToValue[l.MetricName][l.APPLabelName] = l.APPLabelValue
 		}
-		t.layoutKeyToIndex.Store(NewLayoutKey(l.MetricName, l.APPLabelName, l.APPLabelValue), uint8(l.APPLabelColumnIndex))
+		mll.layoutKeyToIndex.Store(NewLayoutKey(l.MetricName, l.APPLabelName), uint8(l.APPLabelColumnIndex))
 	}
 	return nil
 }
 
-func (t *metricAndAPPLabelLayout) load() ([]*mysql.PrometheusMetricAPPLabelLayout, error) {
+func (mml *metricAndAPPLabelLayout) load() ([]*mysql.PrometheusMetricAPPLabelLayout, error) {
 	var metricAPPLabelLayouts []*mysql.PrometheusMetricAPPLabelLayout
 	err := mysql.Db.Find(&metricAPPLabelLayouts).Error
 	return metricAPPLabelLayouts, err

@@ -31,7 +31,8 @@ func NewSynchronizerEvent() *SynchronizerEvent {
 
 var logCount = 0 // TODO: remove
 
-func (e *SynchronizerEvent) Sync(ctx context.Context, in *controller.SyncPrometheusRequest) (*controller.SyncPrometheusResponse, error) {	print := false
+func (e *SynchronizerEvent) Sync(ctx context.Context, in *controller.SyncPrometheusRequest) (*controller.SyncPrometheusResponse, error) {
+	print := false
 	logCount++
 	if logCount%10 == 0 {
 		print = true

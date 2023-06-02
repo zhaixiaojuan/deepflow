@@ -27,35 +27,35 @@ type metricName struct {
 	nameToID sync.Map
 }
 
-func (t *metricName) Get() *sync.Map {
-	return &t.nameToID
+func (mn *metricName) Get() *sync.Map {
+	return &mn.nameToID
 }
 
-func (t *metricName) GetIDByName(n string) (int, bool) {
-	if id, ok := t.nameToID.Load(n); ok {
+func (mn *metricName) GetIDByName(n string) (int, bool) {
+	if id, ok := mn.nameToID.Load(n); ok {
 		return id.(int), true
 	}
 	return 0, false
 }
 
-func (t *metricName) Add(batch []*controller.PrometheusMetricName) {
-	for _, m := range batch {
-		t.nameToID.Store(m.GetName(), int(m.GetId()))
+func (mn *metricName) Add(batch []*controller.PrometheusMetricName) {
+	for _, item := range batch {
+		mn.nameToID.Store(item.GetName(), int(item.GetId()))
 	}
 }
 
-func (t *metricName) refresh(args ...interface{}) error {
-	metricNames, err := t.load()
+func (mn *metricName) refresh(args ...interface{}) error {
+	metricNames, err := mn.load()
 	if err != nil {
 		return err
 	}
-	for _, mn := range metricNames {
-		t.nameToID.Store(mn.Name, mn.ID)
+	for _, item := range metricNames {
+		mn.nameToID.Store(item.Name, item.ID)
 	}
 	return nil
 }
 
-func (t *metricName) load() ([]*mysql.PrometheusMetricName, error) {
+func (mn *metricName) load() ([]*mysql.PrometheusMetricName, error) {
 	var metricNames []*mysql.PrometheusMetricName
 	err := mysql.Db.Find(&metricNames).Error
 	return metricNames, err

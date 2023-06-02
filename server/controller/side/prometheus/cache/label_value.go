@@ -27,31 +27,31 @@ type labelValue struct {
 	valueToID sync.Map
 }
 
-func (t *labelValue) GetIDByValue(v string) (int, bool) {
-	if id, ok := t.valueToID.Load(v); ok {
+func (lv *labelValue) GetIDByValue(v string) (int, bool) {
+	if id, ok := lv.valueToID.Load(v); ok {
 		return id.(int), true
 	}
 	return 0, false
 }
 
-func (t *labelValue) Add(batch []*controller.PrometheusLabelValue) {
-	for _, m := range batch {
-		t.valueToID.Store(m.GetValue(), int(m.GetId()))
+func (lv *labelValue) Add(batch []*controller.PrometheusLabelValue) {
+	for _, item := range batch {
+		lv.valueToID.Store(item.GetValue(), int(item.GetId()))
 	}
 }
 
-func (t *labelValue) refresh(args ...interface{}) error {
-	labelValues, err := t.load()
+func (lv *labelValue) refresh(args ...interface{}) error {
+	labelValues, err := lv.load()
 	if err != nil {
 		return err
 	}
-	for _, lv := range labelValues {
-		t.valueToID.Store(lv.Value, lv.ID)
+	for _, item := range labelValues {
+		lv.valueToID.Store(item.Value, item.ID)
 	}
 	return nil
 }
 
-func (t *labelValue) load() ([]*mysql.PrometheusLabelValue, error) {
+func (lv *labelValue) load() ([]*mysql.PrometheusLabelValue, error) {
 	var labelValues []*mysql.PrometheusLabelValue
 	err := mysql.Db.Find(&labelValues).Error
 	return labelValues, err
