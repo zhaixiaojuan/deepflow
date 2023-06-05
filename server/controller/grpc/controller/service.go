@@ -20,7 +20,7 @@ import (
 	api "github.com/deepflowio/deepflow/message/controller"
 	"github.com/deepflowio/deepflow/server/controller/genesis"
 	grpcserver "github.com/deepflowio/deepflow/server/controller/grpc"
-	prometheus "github.com/deepflowio/deepflow/server/controller/side/prometheus/service/grpc"
+	prometheus "github.com/deepflowio/deepflow/server/controller/prometheus/service/grpc"
 
 	"github.com/op/go-logging"
 	"golang.org/x/net/context"
@@ -32,7 +32,7 @@ var log = logging.MustGetLogger("grpc.controller")
 type service struct {
 	encryptKeyEvent *EncryptKeyEvent
 	resourceIDEvent *IDEvent
-	prometheusEvent *prometheus.SynchronizerEvent
+	prometheusEvent *prometheus.EncoderEvent
 }
 
 func init() {
@@ -43,7 +43,7 @@ func newService() *service {
 	return &service{
 		encryptKeyEvent: NewEncryptKeyEvent(),
 		resourceIDEvent: NewIDEvent(),
-		prometheusEvent: prometheus.NewSynchronizerEvent(),
+		prometheusEvent: prometheus.NewEncoderEvent(),
 	}
 }
 
@@ -78,5 +78,5 @@ func (s *service) ReleaseResourceID(ctx context.Context, in *api.ReleaseResource
 }
 
 func (s *service) SyncPrometheus(ctx context.Context, in *api.SyncPrometheusRequest) (*api.SyncPrometheusResponse, error) {
-	return s.prometheusEvent.Sync(ctx, in)
+	return s.prometheusEvent.Encode(ctx, in)
 }

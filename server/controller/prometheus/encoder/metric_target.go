@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package synchronizer
+package encoder
 
 import (
 	"sync"
 
 	"github.com/deepflowio/deepflow/message/controller"
 	"github.com/deepflowio/deepflow/server/controller/db/mysql"
-	"github.com/deepflowio/deepflow/server/controller/side/prometheus/cache"
+	"github.com/deepflowio/deepflow/server/controller/prometheus/cache"
 )
 
 type metricTarget struct {

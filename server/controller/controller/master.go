@@ -29,9 +29,9 @@ import (
 	"github.com/deepflowio/deepflow/server/controller/monitor"
 	"github.com/deepflowio/deepflow/server/controller/monitor/license"
 	"github.com/deepflowio/deepflow/server/controller/monitor/vtap"
+	"github.com/deepflowio/deepflow/server/controller/prometheus"
 	"github.com/deepflowio/deepflow/server/controller/recorder"
 	recorderdb "github.com/deepflowio/deepflow/server/controller/recorder/db"
-	"github.com/deepflowio/deepflow/server/controller/side/prometheus"
 	"github.com/deepflowio/deepflow/server/controller/tagrecorder"
 )
 
@@ -144,7 +144,7 @@ func checkAndStartMasterFunctions(
 				// domain检查及自愈
 				domainChecker.Start()
 
-				prometheus.Synchronizer.Start()
+				prometheus.Encoder.Start()
 			} else if thisIsMasterController {
 				thisIsMasterController = false
 				log.Infof("I am not the master controller anymore, new master controller is %s", newMasterController)
@@ -170,7 +170,7 @@ func checkAndStartMasterFunctions(
 
 				recorderdb.IDMNG.Stop()
 
-				prometheus.Synchronizer.Stop()
+				prometheus.Encoder.Stop()
 			} else {
 				log.Infof(
 					"current master controller is %s, previous master controller is %s",

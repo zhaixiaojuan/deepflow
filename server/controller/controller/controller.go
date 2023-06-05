@@ -42,9 +42,9 @@ import (
 	resourcerouter "github.com/deepflowio/deepflow/server/controller/http/router/resource"
 	"github.com/deepflowio/deepflow/server/controller/manager"
 	"github.com/deepflowio/deepflow/server/controller/monitor"
+	"github.com/deepflowio/deepflow/server/controller/prometheus"
 	recorderdb "github.com/deepflowio/deepflow/server/controller/recorder/db"
 	"github.com/deepflowio/deepflow/server/controller/report"
-	"github.com/deepflowio/deepflow/server/controller/side/prometheus"
 	"github.com/deepflowio/deepflow/server/controller/statsd"
 	"github.com/deepflowio/deepflow/server/controller/tagrecorder"
 	"github.com/deepflowio/deepflow/server/controller/trisolaris"
@@ -155,10 +155,10 @@ func Start(ctx context.Context, configPath, serverLogFile string, shared *server
 	go t.Start()
 
 	prometheus := prometheus.GetSingleton()
-	prometheus.EncoderCache.Start(ctx)
-	prometheus.Synchronizer.Init(ctx, &cfg.PrometheusCfg)
+	prometheus.SynchronizerCache.Start(ctx)
+	prometheus.Encoder.Init(ctx, &cfg.PrometheusCfg)
 	if isMasterController {
-		prometheus.Synchronizer.Start()
+		prometheus.Encoder.Start()
 	}
 
 	router.SetInitStageForHealthChecker("TagRecorder init")

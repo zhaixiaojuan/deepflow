@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package synchronizer
+package encoder
 
 import (
 	"sync"

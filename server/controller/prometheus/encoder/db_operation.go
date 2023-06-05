@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package synchronizer
+package encoder
 
 import (
 	"github.com/deepflowio/deepflow/server/controller/db/mysql"
-	"github.com/deepflowio/deepflow/server/controller/side/prometheus/constraint"
+	"github.com/deepflowio/deepflow/server/controller/prometheus/constraint"
 )
 
 func addBatch[T constraint.OperateBatchModel](toAdd []*T, resourceType string) error {

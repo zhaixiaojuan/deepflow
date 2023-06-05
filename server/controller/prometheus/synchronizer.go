@@ -27,25 +27,25 @@ import (
 
 	"github.com/deepflowio/deepflow/message/controller"
 	"github.com/deepflowio/deepflow/message/trident"
-	"github.com/deepflowio/deepflow/server/controller/side/prometheus/cache"
-	. "github.com/deepflowio/deepflow/server/controller/side/prometheus/common"
+	"github.com/deepflowio/deepflow/server/controller/prometheus/cache"
+	. "github.com/deepflowio/deepflow/server/controller/prometheus/common"
 )
 
-var log = logging.MustGetLogger("side.prometheus")
+var log = logging.MustGetLogger("prometheus")
 
-type Encoder struct {
+type Synchronizer struct {
 	cache   *cache.Cache
 	grpcurl *GRPCURL
 }
 
-func NewEncoder() *Encoder {
-	return &Encoder{
-		cache:   cache.GetSingletonCache(),
+func NewSynchronizer() *Synchronizer {
+	return &Synchronizer{
+		cache:   cache.GetSingleton(),
 		grpcurl: new(GRPCURL),
 	}
 }
 
-func (e *Encoder) Encode(req *trident.PrometheusLabelRequest) (*trident.PrometheusLabelResponse, error) {
+func (e *Synchronizer) Sync(req *trident.PrometheusLabelRequest) (*trident.PrometheusLabelResponse, error) {
 	if req == nil || (len(req.GetRequestLabels()) == 0 && len(req.GetRequestTargets()) == 0) {
 		return e.assembleFully()
 	}
@@ -57,7 +57,7 @@ func (e *Encoder) Encode(req *trident.PrometheusLabelRequest) (*trident.Promethe
 	return e.assemble(req)
 }
 
-func (e *Encoder) assembleFully() (*trident.PrometheusLabelResponse, error) {
+func (e *Synchronizer) assembleFully() (*trident.PrometheusLabelResponse, error) {
 	defer e.cache.Clear()
 	err := e.cache.RefreshFully()
 	if err != nil {
@@ -77,7 +77,7 @@ func (e *Encoder) assembleFully() (*trident.PrometheusLabelResponse, error) {
 	return resp, err
 }
 
-func (e *Encoder) assembleLabelFully() ([]*trident.MetricLabelResponse, error) {
+func (e *Synchronizer) assembleLabelFully() ([]*trident.MetricLabelResponse, error) {
 	var err error
 	mLabels := make([]*trident.MetricLabelResponse, 0)
 	e.cache.MetricName.Get().Range(func(k, v interface{}) bool {
@@ -121,7 +121,7 @@ func (e *Encoder) assembleLabelFully() ([]*trident.MetricLabelResponse, error) {
 	return mLabels, err
 }
 
-func (e *Encoder) assembleTargetFully() ([]*trident.TargetResponse, error) {
+func (e *Synchronizer) assembleTargetFully() ([]*trident.TargetResponse, error) {
 	var err error
 	targets := make([]*trident.TargetResponse, 0)
 	e.cache.Target.Get().Range(func(k, v interface{}) bool {
@@ -149,7 +149,7 @@ func (e *Encoder) assembleTargetFully() ([]*trident.TargetResponse, error) {
 	return targets, err
 }
 
-func (e *Encoder) prepare(req *trident.PrometheusLabelRequest) error {
+func (e *Synchronizer) prepare(req *trident.PrometheusLabelRequest) error {
 	metricNamesToE := mapset.NewSet[string]()
 	labelNamesToE := mapset.NewSet[string]()
 	labelValuesToE := mapset.NewSet[string]()
@@ -262,7 +262,7 @@ func (e *Encoder) prepare(req *trident.PrometheusLabelRequest) error {
 	return eg.Wait()
 }
 
-func (e *Encoder) assemble(req *trident.PrometheusLabelRequest) (*trident.PrometheusLabelResponse, error) {
+func (e *Synchronizer) assemble(req *trident.PrometheusLabelRequest) (*trident.PrometheusLabelResponse, error) {
 	resp := new(trident.PrometheusLabelResponse)
 	mls, err := e.assembleMetricLabel(req.GetRequestLabels())
 	if err != nil {
@@ -277,7 +277,7 @@ func (e *Encoder) assemble(req *trident.PrometheusLabelRequest) (*trident.Promet
 	return resp, nil
 }
 
-func (e *Encoder) assembleMetricLabel(mls []*trident.MetricLabelRequest) ([]*trident.MetricLabelResponse, error) {
+func (e *Synchronizer) assembleMetricLabel(mls []*trident.MetricLabelRequest) ([]*trident.MetricLabelResponse, error) {
 	respMLs := make([]*trident.MetricLabelResponse, 0)
 	for _, ml := range mls {
 		mn := ml.GetMetricName()
@@ -317,7 +317,7 @@ func (e *Encoder) assembleMetricLabel(mls []*trident.MetricLabelRequest) ([]*tri
 	return respMLs, nil
 }
 
-func (e *Encoder) assembleTarget(ts []*trident.TargetRequest) ([]*trident.TargetResponse, error) {
+func (e *Synchronizer) assembleTarget(ts []*trident.TargetRequest) ([]*trident.TargetResponse, error) {
 	respTs := make([]*trident.TargetResponse, 0)
 	for _, t := range ts {
 		instance := t.GetInstance()
@@ -348,48 +348,46 @@ func (e *Encoder) assembleTarget(ts []*trident.TargetRequest) ([]*trident.Target
 	return respTs, nil
 }
 
-func (e *Encoder) tryAppendMetricNameToEncode(toEn mapset.Set[string], name string) {
+func (e *Synchronizer) tryAppendMetricNameToEncode(toEn mapset.Set[string], name string) {
 	if _, ok := e.cache.MetricName.GetIDByName(name); !ok {
 		toEn.Add(name)
 	}
 }
 
-func (e *Encoder) addMetricNameCache(arg ...interface{}) error {
+func (e *Synchronizer) addMetricNameCache(arg ...interface{}) error {
 	mns := arg[0].([]*controller.PrometheusMetricName)
 	e.cache.MetricName.Add(mns)
 	return nil
 }
 
-func (e *Encoder) tryAppendLabelNameToEncode(toEn mapset.Set[string], name string) {
+func (e *Synchronizer) tryAppendLabelNameToEncode(toEn mapset.Set[string], name string) {
 	if _, ok := e.cache.LabelName.GetIDByName(name); !ok {
 		toEn.Add(name)
 	}
 }
 
-func (e *Encoder) addLabelNameCache(arg ...interface{}) error {
+func (e *Synchronizer) addLabelNameCache(arg ...interface{}) error {
 	lns := arg[0].([]*controller.PrometheusLabelName)
 	e.cache.LabelName.Add(lns)
 	return nil
 }
 
-func (e *Encoder) tryAppendLabelValueToEncode(toEn mapset.Set[string], name string) {
+func (e *Synchronizer) tryAppendLabelValueToEncode(toEn mapset.Set[string], name string) {
 	if _, ok := e.cache.LabelValue.GetIDByValue(name); !ok {
 		toEn.Add(name)
 	}
 }
 
-func (e *Encoder) addLabelValueCache(arg ...interface{}) error {
+func (e *Synchronizer) addLabelValueCache(arg ...interface{}) error {
 	lvs := arg[0].([]*controller.PrometheusLabelValue)
 	e.cache.LabelValue.Add(lvs)
 	return nil
 }
 
-func (e *Encoder) tryAppendMetricAPPLabelLayoutToEncode(toEn mapset.Set[cache.LayoutKey], metricName, labelName string, targetID int) {
+func (e *Synchronizer) tryAppendMetricAPPLabelLayoutToEncode(toEn mapset.Set[cache.LayoutKey], metricName, labelName string, targetID int) {
 	targetLabelNameToValue := e.cache.Target.GetLabelNameToValueByID(targetID)
-	for tln := range targetLabelNameToValue {
-		if tln == labelName {
-			return
-		}
+	if _, ok := targetLabelNameToValue[labelName]; ok {
+		return
 	}
 	k := cache.NewLayoutKey(metricName, labelName)
 	if _, ok := e.cache.MetricAndAPPLabelLayout.GetIndexByKey(k); !ok {
@@ -397,40 +395,35 @@ func (e *Encoder) tryAppendMetricAPPLabelLayoutToEncode(toEn mapset.Set[cache.La
 	}
 }
 
-func (e *Encoder) addMetricAPPLabelLayoutCache(arg ...interface{}) error {
+func (e *Synchronizer) addMetricAPPLabelLayoutCache(arg ...interface{}) error {
 	ls := arg[0].([]*controller.PrometheusMetricAPPLabelLayout)
 	e.cache.MetricAndAPPLabelLayout.Add(ls)
 	return nil
 }
 
-func (e *Encoder) tryAppendLabelToAdd(toAdd mapset.Set[cache.LabelKey], name, value string) {
+func (e *Synchronizer) tryAppendLabelToAdd(toAdd mapset.Set[cache.LabelKey], name, value string) {
 	if ok := e.cache.Label.IfKeyExists(cache.NewLabelKey(name, value)); !ok {
 		toAdd.Add(cache.NewLabelKey(name, value))
 	}
 }
 
-func (e *Encoder) addLabelCache(arg ...interface{}) error {
+func (e *Synchronizer) addLabelCache(arg ...interface{}) error {
 	ls := arg[0].([]*controller.PrometheusLabel)
 	e.cache.Label.Add(ls)
 	return nil
 }
 
-var logCount = 0 // TODO: remove
-
-func (e *Encoder) tryAppendMetricLabelToAdd(toAdd map[string]mapset.Set[cache.MetricLabelDetailKey], metricName, labelName, labelValue string) {
+func (e *Synchronizer) tryAppendMetricLabelToAdd(toAdd map[string]mapset.Set[cache.MetricLabelDetailKey], metricName, labelName, labelValue string) {
 	mlk := cache.NewMetricLabelDetailKey(metricName, labelName, labelValue)
 	if ok := e.cache.MetricLabel.IfKeyExists(mlk); !ok {
 		if _, ok := toAdd[metricName]; !ok {
 			toAdd[metricName] = mapset.NewSet[cache.MetricLabelDetailKey]()
 		}
-		if logCount%10 == 0 {
-			log.Infof("add metric label: %s", mlk)
-		}
 		toAdd[metricName].Add(mlk)
 	}
 }
 
-func (e *Encoder) addMetricLabelCache(arg ...interface{}) error {
+func (e *Synchronizer) addMetricLabelCache(arg ...interface{}) error {
 	m := arg[0].(map[string]mapset.Set[cache.MetricLabelDetailKey])
 	for _, ks := range m {
 		e.cache.MetricLabel.Add(ks.ToSlice())
@@ -438,21 +431,14 @@ func (e *Encoder) addMetricLabelCache(arg ...interface{}) error {
 	return nil
 }
 
-func (e *Encoder) tryAppendMetricTargetToAdd(toAdd mapset.Set[cache.MetricTargetKey], metricName string, targetID int) {
-	print := false
-	logCount++
-	if logCount%10 == 0 {
-		print = true
-	}
-	if print {
-		log.Infof("try add metric_target (metric_name: %s, target_id: %d)", metricName, targetID)
-	}
-	if ok := e.cache.MetricTarget.IfKeyExists(cache.NewMetricTargetKey(metricName, targetID)); !ok {
-		toAdd.Add(cache.NewMetricTargetKey(metricName, targetID))
+func (e *Synchronizer) tryAppendMetricTargetToAdd(toAdd mapset.Set[cache.MetricTargetKey], metricName string, targetID int) {
+	mtk := cache.NewMetricTargetKey(metricName, targetID)
+	if ok := e.cache.MetricTarget.IfKeyExists(mtk); !ok {
+		toAdd.Add(mtk)
 	}
 }
 
-func (e *Encoder) addMetricTargetCache(arg ...interface{}) error {
+func (e *Synchronizer) addMetricTargetCache(arg ...interface{}) error {
 	ts := arg[0].([]cache.MetricTargetKey)
 	e.cache.MetricTarget.Add(ts)
 	return nil

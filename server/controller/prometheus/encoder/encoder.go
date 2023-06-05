@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package synchronizer
+package encoder
 
 import (
 	"context"
@@ -25,18 +25,18 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/deepflowio/deepflow/message/controller"
-	. "github.com/deepflowio/deepflow/server/controller/side/prometheus/common"
-	prometheuscfg "github.com/deepflowio/deepflow/server/controller/side/prometheus/config"
+	. "github.com/deepflowio/deepflow/server/controller/prometheus/common"
+	prometheuscfg "github.com/deepflowio/deepflow/server/controller/prometheus/config"
 )
 
-var log = logging.MustGetLogger("side.prometheus.synchronizer")
+var log = logging.MustGetLogger("prometheus.encoder")
 
 var (
 	syncOnce sync.Once
-	syncIns  *Synchronizer
+	syncIns  *Encoder
 )
 
-type Synchronizer struct {
+type Encoder struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -53,19 +53,19 @@ type Synchronizer struct {
 	metricTarget *metricTarget
 }
 
-func GetSingleton() *Synchronizer {
+func GetSingleton() *Encoder {
 	syncOnce.Do(func() {
-		syncIns = &Synchronizer{}
+		syncIns = &Encoder{}
 	})
 	return syncIns
 }
 
-func (m *Synchronizer) Init(ctx context.Context, cfg *prometheuscfg.Config) {
-	log.Infof("init prometheus synchronizer")
+func (m *Encoder) Init(ctx context.Context, cfg *prometheuscfg.Config) {
+	log.Infof("init prometheus encoder")
 	mCtx, mCancel := context.WithCancel(ctx)
 	m.ctx = mCtx
 	m.cancel = mCancel
-	m.metricName = newMetricName(cfg.ResourceMaxID0)
+	m.metricName = newMetricName(cfg.ResourceMaxID1)
 	m.labelName = newLabelName(cfg.ResourceMaxID0)
 	m.labelValue = newLabelValue(cfg.ResourceMaxID1)
 	m.label = newLabel()
@@ -76,7 +76,7 @@ func (m *Synchronizer) Init(ctx context.Context, cfg *prometheuscfg.Config) {
 	return
 }
 
-func (m *Synchronizer) Start() error {
+func (m *Encoder) Start() error {
 	m.mux.Lock()
 	if m.working {
 		return nil
@@ -84,7 +84,7 @@ func (m *Synchronizer) Start() error {
 	m.working = true
 	m.mux.Unlock()
 
-	log.Info("prometheus synchronizer started")
+	log.Info("prometheus encoder started")
 	m.refresh()
 	go func() {
 		ticker := time.NewTicker(m.refreshInterval)
@@ -100,17 +100,17 @@ func (m *Synchronizer) Start() error {
 	return nil
 }
 
-func (m *Synchronizer) Stop() {
+func (m *Encoder) Stop() {
 	if m.cancel != nil {
 		m.cancel()
 	}
 	m.mux.Lock()
 	m.working = false
 	m.mux.Unlock()
-	log.Info("prometheus synchronizer stopped")
+	log.Info("prometheus encoder stopped")
 }
 
-func (m *Synchronizer) refresh() error {
+func (m *Encoder) refresh() error {
 	m.label.refresh()
 	eg, ctx := errgroup.WithContext(m.ctx)
 	AppendErrGroupWithContext(ctx, eg, m.metricName.refresh)
@@ -122,7 +122,7 @@ func (m *Synchronizer) refresh() error {
 	return eg.Wait()
 }
 
-func (m *Synchronizer) Sync(req *controller.SyncPrometheusRequest) (*controller.SyncPrometheusResponse, error) {
+func (m *Encoder) Encode(req *controller.SyncPrometheusRequest) (*controller.SyncPrometheusResponse, error) {
 	resp := new(controller.SyncPrometheusResponse)
 	m.syncLabel(resp, req.GetLabels())
 	eg, ctx := errgroup.WithContext(m.ctx)
@@ -136,7 +136,7 @@ func (m *Synchronizer) Sync(req *controller.SyncPrometheusRequest) (*controller.
 	return resp, err
 }
 
-func (m *Synchronizer) syncMetricName(args ...interface{}) error {
+func (m *Encoder) syncMetricName(args ...interface{}) error {
 	resp := args[0].(*controller.SyncPrometheusResponse)
 	names := args[1].([]string)
 	mns, err := m.metricName.sync(names)
@@ -147,7 +147,7 @@ func (m *Synchronizer) syncMetricName(args ...interface{}) error {
 	return nil
 }
 
-func (m *Synchronizer) syncLabelName(args ...interface{}) error {
+func (m *Encoder) syncLabelName(args ...interface{}) error {
 	resp := args[0].(*controller.SyncPrometheusResponse)
 	names := args[1].([]string)
 	lns, err := m.labelName.sync(names)
@@ -158,7 +158,7 @@ func (m *Synchronizer) syncLabelName(args ...interface{}) error {
 	return nil
 }
 
-func (m *Synchronizer) syncLabelValue(args ...interface{}) error {
+func (m *Encoder) syncLabelValue(args ...interface{}) error {
 	resp := args[0].(*controller.SyncPrometheusResponse)
 	values := args[1].([]string)
 	lvs, err := m.labelValue.sync(values)
@@ -169,7 +169,7 @@ func (m *Synchronizer) syncLabelValue(args ...interface{}) error {
 	return nil
 }
 
-func (m *Synchronizer) syncLabelIndex(args ...interface{}) error {
+func (m *Encoder) syncLabelIndex(args ...interface{}) error {
 	resp := args[0].(*controller.SyncPrometheusResponse)
 	layouts := args[1].([]*controller.PrometheusMetricAPPLabelLayoutRequest)
 	lis, err := m.labelLayout.sync(layouts)
@@ -180,7 +180,7 @@ func (m *Synchronizer) syncLabelIndex(args ...interface{}) error {
 	return nil
 }
 
-func (m *Synchronizer) syncLabel(args ...interface{}) error {
+func (m *Encoder) syncLabel(args ...interface{}) error {
 	resp := args[0].(*controller.SyncPrometheusResponse)
 	labels := args[1].([]*controller.PrometheusLabelRequest)
 	ls, err := m.label.sync(labels)
@@ -191,7 +191,7 @@ func (m *Synchronizer) syncLabel(args ...interface{}) error {
 	return nil
 }
 
-func (m *Synchronizer) syncMetricLabel(args ...interface{}) error {
+func (m *Encoder) syncMetricLabel(args ...interface{}) error {
 	mls := args[0].([]*controller.PrometheusMetricLabelRequest)
 	err := m.metricLabel.sync(mls)
 	if err != nil {
@@ -200,7 +200,7 @@ func (m *Synchronizer) syncMetricLabel(args ...interface{}) error {
 	return nil
 }
 
-func (m *Synchronizer) syncMetricTarget(args ...interface{}) error {
+func (m *Encoder) syncMetricTarget(args ...interface{}) error {
 	targets := args[0].([]*controller.PrometheusMetricTarget)
 	err := m.metricTarget.sync(targets)
 	if err != nil {

@@ -30,7 +30,7 @@ import (
 	genesis "github.com/deepflowio/deepflow/server/controller/genesis/config"
 	manager "github.com/deepflowio/deepflow/server/controller/manager/config"
 	monitor "github.com/deepflowio/deepflow/server/controller/monitor/config"
-	prometheus "github.com/deepflowio/deepflow/server/controller/side/prometheus/config"
+	prometheus "github.com/deepflowio/deepflow/server/controller/prometheus/config"
 	statsd "github.com/deepflowio/deepflow/server/controller/statsd/config"
 	tagrecorder "github.com/deepflowio/deepflow/server/controller/tagrecorder/config"
 	trisolaris "github.com/deepflowio/deepflow/server/controller/trisolaris/config"

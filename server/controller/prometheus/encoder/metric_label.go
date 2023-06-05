@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package synchronizer
+package encoder
 
 import (
 	"sync"
 
 	"github.com/deepflowio/deepflow/message/controller"
 	"github.com/deepflowio/deepflow/server/controller/db/mysql"
-	"github.com/deepflowio/deepflow/server/controller/side/prometheus/cache"
+	"github.com/deepflowio/deepflow/server/controller/prometheus/cache"
 )
 
 type metricLabel struct {
@@ -32,7 +32,7 @@ type metricLabel struct {
 
 func newMetricLabel(l *label) *metricLabel {
 	return &metricLabel{
-		resourceType: "metric_Label",
+		resourceType: "metric_label",
 		label:        l,
 	}
 }

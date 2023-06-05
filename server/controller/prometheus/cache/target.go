@@ -21,7 +21,7 @@ import (
 	"sync"
 
 	"github.com/deepflowio/deepflow/server/controller/db/mysql"
-	. "github.com/deepflowio/deepflow/server/controller/side/prometheus/common"
+	. "github.com/deepflowio/deepflow/server/controller/prometheus/common"
 )
 
 var (

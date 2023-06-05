@@ -26,7 +26,7 @@ import (
 
 	"github.com/deepflowio/deepflow/server/controller/genesis"
 	grpcserver "github.com/deepflowio/deepflow/server/controller/grpc"
-	prometheus "github.com/deepflowio/deepflow/server/controller/side/prometheus/service/grpc"
+	prometheus "github.com/deepflowio/deepflow/server/controller/prometheus/service/grpc"
 	"github.com/deepflowio/deepflow/server/controller/trisolaris/services/grpc/statsd"
 )
 
@@ -38,7 +38,7 @@ type service struct {
 	kubernetesClusterIDEvent *KubernetesClusterIDEvent
 	processInfoEvent         *ProcessInfoEvent
 	pluginEvent              *PluginEvent
-	prometheusEvent          *prometheus.EncoderEvent
+	prometheusEvent          *prometheus.SynchronizerEvent
 }
 
 func init() {
@@ -53,7 +53,7 @@ func newService() *service {
 		upgradeEvent:     NewUpgradeEvent(),
 		processInfoEvent: NewprocessInfoEvent(),
 		pluginEvent:      NewPluginEvent(),
-		prometheusEvent:  prometheus.NewEncoderEvent(),
+		prometheusEvent:  prometheus.NewSynchronizerEvent(),
 	}
 }
 
