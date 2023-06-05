@@ -70,7 +70,7 @@ type PrometheusMetricLabel struct {
 	LabelID    int    `gorm:"column:label_id;type:int(10) unsigned;not null"`
 }
 
-type PrometheusMetricTarget struct { // TODO delete
+type PrometheusMetricTarget struct {
 	IDField    `gorm:"embedded"`
 	MetricName string `gorm:"column:metric_name;type:varchar(256);not null"`
 	TargetID   int    `gorm:"column:target_id;type:int(10) unsigned;not null"`

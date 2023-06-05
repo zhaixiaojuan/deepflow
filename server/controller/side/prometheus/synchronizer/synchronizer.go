@@ -44,12 +44,13 @@ type Synchronizer struct {
 	working         bool
 	refreshInterval time.Duration
 
-	metricName  *metricName
-	labelName   *labelName
-	labelValue  *labelValue
-	labelLayout *labelLayout
-	label       *label
-	metricLabel *metricLabel
+	metricName   *metricName
+	labelName    *labelName
+	labelValue   *labelValue
+	labelLayout  *labelLayout
+	label        *label
+	metricLabel  *metricLabel
+	metricTarget *metricTarget
 }
 
 func GetSingleton() *Synchronizer {
@@ -70,6 +71,7 @@ func (m *Synchronizer) Init(ctx context.Context, cfg *prometheuscfg.Config) {
 	m.label = newLabel()
 	m.labelLayout = newLabelLayout()
 	m.metricLabel = newMetricLabel(m.label)
+	m.metricTarget = newMetricTarget()
 	m.refreshInterval = time.Duration(cfg.CacheRefreshInterval) * time.Second
 	return
 }
@@ -116,6 +118,7 @@ func (m *Synchronizer) refresh() error {
 	AppendErrGroupWithContext(ctx, eg, m.labelValue.refresh)
 	AppendErrGroupWithContext(ctx, eg, m.labelLayout.refresh)
 	AppendErrGroupWithContext(ctx, eg, m.metricLabel.refresh)
+	AppendErrGroupWithContext(ctx, eg, m.metricTarget.refresh)
 	return eg.Wait()
 }
 
@@ -128,6 +131,7 @@ func (m *Synchronizer) Sync(req *controller.SyncPrometheusRequest) (*controller.
 	AppendErrGroupWithContext(ctx, eg, m.syncLabelValue, resp, req.GetLabelValues())
 	AppendErrGroupWithContext(ctx, eg, m.syncLabelIndex, resp, req.GetMetricAppLabelLayouts())
 	AppendErrGroupWithContext(ctx, eg, m.syncMetricLabel, req.GetMetricLabels())
+	AppendErrGroupWithContext(ctx, eg, m.syncMetricTarget, req.GetMetricTargets())
 	err := eg.Wait()
 	return resp, err
 }
@@ -190,6 +194,15 @@ func (m *Synchronizer) syncLabel(args ...interface{}) error {
 func (m *Synchronizer) syncMetricLabel(args ...interface{}) error {
 	mls := args[0].([]*controller.PrometheusMetricLabelRequest)
 	err := m.metricLabel.sync(mls)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *Synchronizer) syncMetricTarget(args ...interface{}) error {
+	targets := args[0].([]*controller.PrometheusMetricTarget)
+	err := m.metricTarget.sync(targets)
 	if err != nil {
 		return err
 	}

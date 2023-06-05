@@ -29,5 +29,5 @@ type StrIDModel interface {
 
 type OperateBatchModel interface {
 	mysql.PrometheusMetricName | mysql.PrometheusLabelName | mysql.PrometheusLabelValue | mysql.PrometheusMetricAPPLabelLayout |
-		mysql.PrometheusLabel | mysql.PrometheusMetricLabel
+		mysql.PrometheusLabel | mysql.PrometheusMetricLabel | mysql.PrometheusMetricTarget
 }

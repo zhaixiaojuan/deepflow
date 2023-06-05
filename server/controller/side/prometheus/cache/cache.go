@@ -48,20 +48,23 @@ type Cache struct {
 	Target                  *target
 	Label                   *label
 	MetricLabel             *metricLabel
+	MetricTarget            *metricTarget
 }
 
 func GetSingletonCache() *Cache {
 	cacheOnce.Do(func() {
 		l := &label{}
+		t := &target{}
 		cacheIns = &Cache{
 			canRefresh:              make(chan bool, 1),
 			MetricName:              &metricName{},
 			LabelName:               &labelName{},
 			LabelValue:              &labelValue{},
 			MetricAndAPPLabelLayout: &metricAndAPPLabelLayout{},
-			Target:                  &target{},
+			Target:                  t,
 			Label:                   l,
 			MetricLabel:             newMetricLabel(l),
+			MetricTarget:            newMetricTarget(t),
 		}
 	})
 	return cacheIns
@@ -242,6 +245,7 @@ func (t *Cache) Start(ctx context.Context) error {
 func (t *Cache) refresh(fully bool) error {
 	log.Info("refresh cache started")
 	t.Label.refresh(fully)
+	t.Target.refresh(fully)
 	eg := &errgroup.Group{}
 	AppendErrGroup(eg, t.MetricName.refresh, fully)
 	AppendErrGroup(eg, t.LabelName.refresh, fully)

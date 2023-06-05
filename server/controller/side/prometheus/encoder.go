@@ -89,17 +89,17 @@ func (e *Encoder) assembleLabelFully() ([]*trident.MetricLabelResponse, error) {
 			lk := labelKeys[i]
 			labelNameID, ok := e.cache.LabelName.GetIDByName(lk.Name)
 			if !ok {
-				log.Errorf("metric_name: %s label_name: %s id not found", metricName, lk.Name)
+				log.Warningf("metric_name: %s label_name: %s id not found", metricName, lk.Name)
 				continue
 			}
 			labelValueID, ok := e.cache.LabelValue.GetIDByValue(lk.Value)
 			if !ok {
-				log.Errorf("metric_name: %s label_value: %s id not found", metricName, lk.Value)
+				log.Warningf("metric_name: %s label_value: %s id not found", metricName, lk.Value)
 				continue
 			}
 			idx, ok := e.cache.MetricAndAPPLabelLayout.GetIndexByKey(cache.NewLayoutKey(metricName, lk.Name))
 			if !ok {
-				log.Errorf("app_label_index (metric_name: %s, app_label_name: %s) not found", metricName, lk.Name)
+				log.Warningf("app_label_index (metric_name: %s, app_label_name: %s) not found", metricName, lk.Name)
 				continue
 			}
 			label := &trident.LabelResponse{
@@ -128,12 +128,12 @@ func (e *Encoder) assembleTargetFully() ([]*trident.TargetResponse, error) {
 		tk := k.(cache.TargetKey)
 		tInstanceID, ok := e.cache.LabelValue.GetIDByValue(tk.Instance)
 		if !ok {
-			log.Errorf("target: %s instance id not found", tk.Instance)
+			log.Warningf("target: %s instance id not found", tk.Instance)
 			return true
 		}
 		tJobID, ok := e.cache.LabelValue.GetIDByValue(tk.Job)
 		if !ok {
-			log.Errorf("target: %s job id not found", tk.Job)
+			log.Warningf("target: %s job id not found", tk.Job)
 			return true
 		}
 		targetID := v.(int)
@@ -156,6 +156,7 @@ func (e *Encoder) prepare(req *trident.PrometheusLabelRequest) error {
 	metricAPPLabelLayoutsToE := mapset.NewSet[cache.LayoutKey]()
 	labelsToAdd := mapset.NewSet[cache.LabelKey]()
 	metricLabelsToAdd := make(map[string]mapset.Set[cache.MetricLabelDetailKey], 0)
+	metricTargetsToAdd := mapset.NewSet[cache.MetricTargetKey]()
 	for _, m := range req.GetRequestLabels() {
 		mn := m.GetMetricName()
 		e.tryAppendMetricNameToEncode(metricNamesToE, mn)
@@ -174,13 +175,16 @@ func (e *Encoder) prepare(req *trident.PrometheusLabelRequest) error {
 			e.tryAppendLabelToAdd(labelsToAdd, ln, lv)
 			e.tryAppendMetricLabelToAdd(metricLabelsToAdd, mn, ln, lv)
 		}
-		targetID, _ := e.cache.Target.GetIDByKey(cache.NewTargetKey(instanceValue, jobValue))
+		targetID, ok := e.cache.Target.GetIDByKey(cache.NewTargetKey(instanceValue, jobValue))
 		for _, l := range m.GetLabels() {
 			ln := l.GetName()
 			if ln == TargetLabelInstance || ln == TargetLabelJob {
 				continue
 			}
 			e.tryAppendMetricAPPLabelLayoutToEncode(metricAPPLabelLayoutsToE, mn, ln, targetID)
+		}
+		if ok {
+			e.tryAppendMetricTargetToAdd(metricTargetsToAdd, mn, targetID)
 		}
 	}
 
@@ -233,6 +237,16 @@ func (e *Encoder) prepare(req *trident.PrometheusLabelRequest) error {
 				}
 				return res
 			}(metricLabelsToAdd),
+			MetricTargets: func(ks []cache.MetricTargetKey) []*controller.PrometheusMetricTarget {
+				res := make([]*controller.PrometheusMetricTarget, 0, len(ks))
+				for i := range ks {
+					res = append(res, &controller.PrometheusMetricTarget{
+						MetricName: &ks[i].MetricName,
+						TargetId:   proto.Uint32(uint32(ks[i].TargetID)),
+					})
+				}
+				return res
+			}(metricTargetsToAdd.ToSlice()),
 		},
 	)
 	if err != nil {
@@ -401,13 +415,17 @@ func (e *Encoder) addLabelCache(arg ...interface{}) error {
 	return nil
 }
 
+var logCount = 0 // TODO: remove
+
 func (e *Encoder) tryAppendMetricLabelToAdd(toAdd map[string]mapset.Set[cache.MetricLabelDetailKey], metricName, labelName, labelValue string) {
 	mlk := cache.NewMetricLabelDetailKey(metricName, labelName, labelValue)
 	if ok := e.cache.MetricLabel.IfKeyExists(mlk); !ok {
 		if _, ok := toAdd[metricName]; !ok {
 			toAdd[metricName] = mapset.NewSet[cache.MetricLabelDetailKey]()
 		}
-		log.Infof("add metric label: %s", mlk)
+		if logCount%10 == 0 {
+			log.Infof("add metric label: %s", mlk)
+		}
 		toAdd[metricName].Add(mlk)
 	}
 }
@@ -417,5 +435,25 @@ func (e *Encoder) addMetricLabelCache(arg ...interface{}) error {
 	for _, ks := range m {
 		e.cache.MetricLabel.Add(ks.ToSlice())
 	}
+	return nil
+}
+
+func (e *Encoder) tryAppendMetricTargetToAdd(toAdd mapset.Set[cache.MetricTargetKey], metricName string, targetID int) {
+	print := false
+	logCount++
+	if logCount%10 == 0 {
+		print = true
+	}
+	if print {
+		log.Infof("try add metric_target (metric_name: %s, target_id: %d)", metricName, targetID)
+	}
+	if ok := e.cache.MetricTarget.IfKeyExists(cache.NewMetricTargetKey(metricName, targetID)); !ok {
+		toAdd.Add(cache.NewMetricTargetKey(metricName, targetID))
+	}
+}
+
+func (e *Encoder) addMetricTargetCache(arg ...interface{}) error {
+	ts := arg[0].([]cache.MetricTargetKey)
+	e.cache.MetricTarget.Add(ts)
 	return nil
 }
