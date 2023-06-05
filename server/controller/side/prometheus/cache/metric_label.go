@@ -49,7 +49,7 @@ func newMetricLabel(l *label) *metricLabel {
 	}
 }
 
-func (ml *metricLabel) IfMetricLabelDetailKeyExists(k MetricLabelDetailKey) bool {
+func (ml *metricLabel) IfKeyExists(k MetricLabelDetailKey) bool {
 	_, ok := ml.metricLabelDetailKeyMap.Load(k)
 	return ok
 }

@@ -42,11 +42,11 @@ type metricAndAPPLabelLayout struct {
 	metricNameToAPPLabelNameToValue map[string]appLabelNameToValue // only for fully assembled
 }
 
-func (mll *metricAndAPPLabelLayout) GetAPPLabelNameToValueByMetricName(n string) appLabelNameToValue {
+func (mll *metricAndAPPLabelLayout) GetLabelNameToValueByMetricName(n string) appLabelNameToValue {
 	return mll.metricNameToAPPLabelNameToValue[n]
 }
 
-func (mll *metricAndAPPLabelLayout) GetIndexByLayoutKey(key LayoutKey) (uint8, bool) {
+func (mll *metricAndAPPLabelLayout) GetIndexByKey(key LayoutKey) (uint8, bool) {
 	if index, ok := mll.layoutKeyToIndex.Load(key); ok {
 		return index.(uint8), true
 	}

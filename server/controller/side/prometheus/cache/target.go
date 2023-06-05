@@ -52,14 +52,14 @@ func (t *target) Get() *sync.Map {
 	return &t.keyToTargetID
 }
 
-func (t *target) GetTargetLabelNameToValueByTargetID(i int) targetLabelNameToValue {
+func (t *target) GetLabelNameToValueByID(i int) targetLabelNameToValue {
 	if labelNameToValue, ok := t.targetIDToLabelNameToValue.Load(i); ok {
 		return labelNameToValue.(targetLabelNameToValue)
 	}
 	return make(targetLabelNameToValue)
 }
 
-func (t *target) GetIDByTargetKey(key TargetKey) (int, bool) {
+func (t *target) GetIDByKey(key TargetKey) (int, bool) {
 	if id, ok := t.keyToTargetID.Load(key); ok {
 		return id.(int), true
 	}
