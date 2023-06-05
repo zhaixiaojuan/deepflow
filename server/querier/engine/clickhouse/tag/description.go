@@ -322,7 +322,7 @@ func GetTagDescriptions(db, table, rawSql string, ctx context.Context) (response
 	for _, _key := range podNSCloudTagRst.Values {
 		key := _key.([]interface{})[0]
 		podNSCloudTagKey := "cloud.tag." + key.(string)
-		if db == ckcommon.DB_NAME_EXT_METRICS || db == ckcommon.DB_NAME_EVENT || db == ckcommon.DB_NAME_PROFILE || table == "vtap_flow_port" || table == "vtap_app_port" {
+		if db == ckcommon.DB_NAME_EXT_METRICS || db == ckcommon.DB_NAME_EVENT || db == ckcommon.DB_NAME_PROFILE || db == ckcommon.DB_NAME_PROMETHEUS || table == "vtap_flow_port" || table == "vtap_app_port" {
 			response.Values = append(response.Values, []interface{}{
 				podNSCloudTagKey, podNSCloudTagKey, podNSCloudTagKey, podNSCloudTagKey, "map_item",
 				"Custom Tag", tagTypeToOperators["string"], []bool{true, true, true}, "", "",
@@ -344,7 +344,7 @@ func GetTagDescriptions(db, table, rawSql string, ctx context.Context) (response
 	for _, _key := range osAPPTagRst.Values {
 		key := _key.([]interface{})[0]
 		osAPPTagKey := "os.app." + key.(string)
-		if db == "ext_metrics" || db == "event" || table == "vtap_flow_port" || table == "vtap_app_port" {
+		if db == "ext_metrics" || db == "event" || db == ckcommon.DB_NAME_PROMETHEUS  || table == "vtap_flow_port" || table == "vtap_app_port" {
 			response.Values = append(response.Values, []interface{}{
 				osAPPTagKey, osAPPTagKey, osAPPTagKey, osAPPTagKey, "map_item",
 				"Custom Tag", tagTypeToOperators["string"], []bool{true, true, true}, "", "",
@@ -400,7 +400,7 @@ func GetTagDescriptions(db, table, rawSql string, ctx context.Context) (response
 			})
 		}
 	}
-	if db == ckcommon.DB_NAME_EXT_METRICS || db == ckcommon.DB_NAME_DEEPFLOW_SYSTEM || db == ckcommon.DB_NAME_PROFILE {
+	if db == ckcommon.DB_NAME_EXT_METRICS || db == ckcommon.DB_NAME_DEEPFLOW_SYSTEM || db == ckcommon.DB_NAME_PROFILE || db == ckcommon.DB_NAME_PROMETHEUS {
 		response.Values = append(response.Values, []interface{}{
 			"tag", "tag", "tag", "tag", "map",
 			"Native Tag", []string{}, []bool{true, true, true}, "tag", "",
