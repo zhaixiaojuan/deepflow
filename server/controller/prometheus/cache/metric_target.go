@@ -62,7 +62,6 @@ func (mt *metricTarget) refresh(args ...interface{}) error {
 	for _, item := range mts {
 		mt.metricTargetKeys.Add(NewMetricTargetKey(item.MetricName, item.TargetID))
 	}
-	log.Infof("metricTargetKeys: %v", mt.metricTargetKeys)
 	return nil
 }
 
