@@ -383,8 +383,7 @@ func (s *Synchronizer) addLabelValueCache(arg ...interface{}) error {
 }
 
 func (s *Synchronizer) tryAppendMetricAPPLabelLayoutToEncode(toEn mapset.Set[cache.LayoutKey], metricName, labelName string, targetID int) {
-	targetLabelNameToValue := s.cache.Target.GetLabelNameToValueByID(targetID)
-	if _, ok := targetLabelNameToValue[labelName]; ok {
+	if ok := s.cache.Target.IfTargetLabelKeyExists(cache.NewTargetLabelKey(targetID, labelName)); ok {
 		return
 	}
 	k := cache.NewLayoutKey(metricName, labelName)

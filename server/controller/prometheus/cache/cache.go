@@ -53,17 +53,17 @@ type Cache struct {
 
 func GetSingleton() *Cache {
 	cacheOnce.Do(func() {
-		l := &label{}
+		l := newLabel()
 		cacheIns = &Cache{
 			canRefresh:              make(chan bool, 1),
 			MetricName:              &metricName{},
 			LabelName:               &labelName{},
 			LabelValue:              &labelValue{},
 			MetricAndAPPLabelLayout: &metricAndAPPLabelLayout{},
-			Target:                  &target{},
+			Target:                  newTarget(),
 			Label:                   l,
 			MetricLabel:             newMetricLabel(l),
-			MetricTarget:            &metricTarget{},
+			MetricTarget:            newMetricTarget(),
 		}
 	})
 	return cacheIns
@@ -265,6 +265,5 @@ func (t *Cache) RefreshFully() error {
 }
 
 func (t *Cache) Clear() {
-	t.MetricAndAPPLabelLayout.clear()
 	t.MetricLabel.clear()
 }

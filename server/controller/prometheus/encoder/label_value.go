@@ -18,6 +18,7 @@ package encoder
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 
@@ -112,8 +113,7 @@ func (lv *labelValue) refresh(args ...interface{}) error {
 // 分配的ID中，若已有被实际使用的ID（闭源页面创建使用），排除已使用ID，仅分配剩余部分。
 func (lv *labelValue) allocate(count int) (ids []int, err error) {
 	if len(lv.usableIDs) == 0 {
-		log.Errorf("%s has no more usable ids", lv.resourceType)
-		return
+		return nil, errors.New(fmt.Sprintf("%s has no more usable ids", lv.resourceType))
 	}
 
 	if len(lv.usableIDs) < count {
