@@ -90,9 +90,6 @@ func (l *ChAPPLabel) generateKey(dbItem mysql.ChAPPLabel) PrometheusAPPLabelKey 
 func (l *ChAPPLabel) generateUpdateInfo(oldItem, newItem mysql.ChAPPLabel) (map[string]interface{}, bool) {
 	updateInfo := make(map[string]interface{})
 	if oldItem.LabelValue != newItem.LabelValue {
-		// log.Info(oldItem)
-		log.Info(oldItem.LabelValue)
-		log.Info(newItem.LabelValue)
 		updateInfo["label_value"] = newItem.LabelValue
 	}
 	if len(updateInfo) > 0 {

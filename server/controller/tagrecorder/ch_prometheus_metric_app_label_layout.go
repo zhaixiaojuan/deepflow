@@ -75,8 +75,6 @@ func (l *ChPrometheusMetricAPPLabelLayout) generateUpdateInfo(oldItem, newItem m
 	}
 
 	if len(updateInfo) > 0 {
-		log.Info(oldItem)
-		log.Info(updateInfo)
 		return updateInfo, true
 	}
 	return nil, false
