@@ -144,7 +144,7 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 	getLabel := func() {
 		temp := map[string]interface{}{
 			"keys":      make(map[LabelKey]interface{}),
-			"id_to_key": make(map[string]LabelKey),
+			"id_to_key": make(map[int]LabelKey),
 		}
 
 		tempCache.Label.idToKey.Range(func(key, value any) bool {
