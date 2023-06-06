@@ -36,7 +36,7 @@ func RegisterPrometheusCacheCommand() *cobra.Command {
 			}
 		},
 	}
-	prometheusCmd.Flags().StringVarP(&t, "type", "t", "all", "cache type, options: metric-name, label-name, label-value, metric-and-app-layout, target, label, metric_target")
+	prometheusCmd.Flags().StringVarP(&t, "type", "t", "all", "cache type, options: metric-name, label-name, label-value, metric-and-app-layout, target, label, metric-label, metric-target")
 
 	return prometheusCmd
 }
@@ -64,9 +64,9 @@ func prometheusCache(cmd *cobra.Command, t string) error {
 		prometheusType = controller.PrometheusCacheType_TARGET
 	case "label":
 		prometheusType = controller.PrometheusCacheType_LABEL
-	case "metric_label":
+	case "metric-label":
 		prometheusType = controller.PrometheusCacheType_METRIC_LABEL
-	case "metric_target":
+	case "metric-target":
 		prometheusType = controller.PrometheusCacheType_METRIC_TARGET
 
 	default:

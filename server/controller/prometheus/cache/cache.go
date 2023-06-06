@@ -232,6 +232,7 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 	case controller.PrometheusCacheType_METRIC_TARGET:
 		getMetricTarget()
 	default:
+		log.Errorf("%s is not supported", t)
 		return nil
 	}
 
