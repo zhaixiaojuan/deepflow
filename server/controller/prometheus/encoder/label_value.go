@@ -150,7 +150,7 @@ func (lv *labelValue) check(ids []int) (inUseIDs []int, err error) {
 	return
 }
 
-func (lv *labelValue) sync(strs []string) ([]*controller.PrometheusLabelValue, error) {
+func (lv *labelValue) encode(strs []string) ([]*controller.PrometheusLabelValue, error) {
 	lv.mutex.Lock()
 	defer lv.mutex.Unlock()
 

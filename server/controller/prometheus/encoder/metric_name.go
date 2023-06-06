@@ -150,7 +150,7 @@ func (mn *metricName) check(ids []int) (inUseIDs []int, err error) {
 	return
 }
 
-func (mn *metricName) sync(strs []string) ([]*controller.PrometheusMetricName, error) {
+func (mn *metricName) encode(strs []string) ([]*controller.PrometheusMetricName, error) {
 	mn.mutex.Lock()
 	defer mn.mutex.Unlock()
 

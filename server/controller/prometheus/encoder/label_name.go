@@ -153,7 +153,7 @@ func (ln *labelName) check(ids []int) (inUseIDs []int, err error) {
 	return
 }
 
-func (ln *labelName) sync(strs []string) ([]*controller.PrometheusLabelName, error) {
+func (ln *labelName) encode(strs []string) ([]*controller.PrometheusLabelName, error) {
 	resp := make([]*controller.PrometheusLabelName, 0)
 	dbToAdd := make([]*mysql.PrometheusLabelName, 0)
 	var countToAllocate int
