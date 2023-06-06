@@ -64,6 +64,8 @@ func prometheusCache(cmd *cobra.Command, t string) error {
 		prometheusType = controller.PrometheusCacheType_TARGET
 	case "label":
 		prometheusType = controller.PrometheusCacheType_LABEL
+	case "metric_label":
+		prometheusType = controller.PrometheusCacheType_METRIC_LABEL
 	case "metric_target":
 		prometheusType = controller.PrometheusCacheType_METRIC_TARGET
 

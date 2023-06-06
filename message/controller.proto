@@ -264,7 +264,8 @@ enum PrometheusCacheType {
     METRIC_AND_APP_LABEL_LAYOUT = 4;
     TARGET = 5;
     LABEL = 6;
-    METRIC_TARGET = 7;
+    METRIC_LABEL = 7;
+    METRIC_TARGET = 8;
 }
 
 message PrometheusCacheRequest {
