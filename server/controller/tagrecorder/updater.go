@@ -68,6 +68,8 @@ func (b *UpdaterBase[MT, KT]) Refresh() {
 			} else {
 				updateInfo, ok := b.dataGenerator.generateUpdateInfo(oldDBItem, newDBItem)
 				if ok {
+					log.Info("oldDBItem in updater:", oldDBItem)
+					log.Info("updateInfo in updater:", updateInfo)
 					b.update(oldDBItem, updateInfo, key)
 				}
 			}
