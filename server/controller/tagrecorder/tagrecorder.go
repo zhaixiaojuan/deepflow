@@ -96,7 +96,7 @@ func (c *TagRecorder) refresh(domainLcuuidToIconID map[string]int, resourceTypeT
 		NewChStringEnum(),
 		NewChIntEnum(),
 		NewChNodeType(),
-		// NewChAPPLabel(),
+		NewChAPPLabel(),
 		// NewChTargetLabel(),
 		NewChPrometheusLabelName(),
 		NewChPrometheusMetricNames(),
