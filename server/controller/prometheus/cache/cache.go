@@ -73,6 +73,13 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 	tempCache := GetSingleton()
 	content := make(map[string]interface{})
 
+	marshal := func(v any) string {
+		b, err := json.Marshal(v)
+		if err != nil {
+			log.Error(err)
+		}
+		return string(b)
+	}
 	getMetricName := func() {
 		temp := map[string]interface{}{
 			"name_to_id": make(map[string]interface{}),
@@ -111,20 +118,20 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 	}
 	getMetricAndAppLabelLayout := func() {
 		temp := map[string]interface{}{
-			"layout_key_to_index": make(map[LayoutKey]interface{}),
+			"layout_key_to_index": make(map[string]interface{}),
 		}
 		tempCache.MetricAndAPPLabelLayout.layoutKeyToIndex.Range(func(key, value any) bool {
-			temp["layout_key_to_index"].(map[LayoutKey]interface{})[key.(LayoutKey)] = value
+			temp["layout_key_to_index"].(map[string]interface{})[marshal(key)] = value
 			return true
 		})
-		if len(temp["layout_key_to_index"].(map[LayoutKey]interface{})) > 0 {
+		if len(temp["layout_key_to_index"].(map[string]interface{})) > 0 {
 			content["metric_and_app_label_layout"] = temp
 		}
 	}
 	getTarget := func() {
 		temp := map[string]interface{}{
 			"key_to_target_id":  make(map[string]interface{}),
-			"target_label_keys": make(map[TargetLabelKey]interface{}),
+			"target_label_keys": make(map[string]interface{}),
 		}
 		tempCache.Target.keyToTargetID.Range(func(key, value any) bool {
 			t := key.(TargetKey)
@@ -133,78 +140,74 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 			return true
 		})
 		tempCache.Target.targetLabelKeys.Each(func(tlk TargetLabelKey) bool {
-			temp["target_label_keys"].(map[TargetLabelKey]interface{})[tlk] = struct{}{}
+			temp["target_label_keys"].(map[string]interface{})[marshal(tlk)] = struct{}{}
 			return true
 		})
 		if len(temp["key_to_target_id"].(map[string]interface{})) > 0 ||
-			len(temp["target_label_keys"].(map[TargetLabelKey]interface{})) > 0 {
+			len(temp["target_label_keys"].(map[string]interface{})) > 0 {
 			content["target"] = temp
 		}
 	}
 	getLabel := func() {
 		temp := map[string]interface{}{
-			"keys":      make(map[LabelKey]interface{}),
-			"id_to_key": make(map[int]LabelKey),
+			"keys":      make(map[string]interface{}),
+			"id_to_key": make(map[int]string),
 		}
 
 		tempCache.Label.idToKey.Range(func(key, value any) bool {
-			log.Infof("key: %v, value: %v", key, value)
-			temp["id_to_key"].(map[int]LabelKey)[key.(int)] = value.(LabelKey)
+			temp["id_to_key"].(map[int]string)[key.(int)] = marshal(value)
 			return true
 		})
 
 		tempCache.Label.keys.Each(func(lk LabelKey) bool {
-			log.Infof("%#v,", lk)
-			temp["keys"].(map[LabelKey]interface{})[lk] = struct{}{}
+			temp["keys"].(map[string]interface{})[marshal(lk)] = struct{}{}
 			return true
 		})
-		b, _ := json.Marshal(temp)
-		log.Infof("temp: %v", string(b))
-		if len(temp["keys"].(map[LabelKey]interface{})) > 0 ||
-			len(temp["id_to_key"].(map[int]LabelKey)) > 0 {
+		if len(temp["keys"].(map[string]interface{})) > 0 ||
+			len(temp["id_to_key"].(map[int]string)) > 0 {
 			content["label"] = temp
 		}
 	}
 	getMetricLabel := func() {
 		temp := map[string]interface{}{
 			"label_cache": map[string]interface{}{
-				"keys":      make(map[LabelKey]interface{}),
-				"id_to_key": make(map[int]LabelKey),
+				"keys":      make(map[string]interface{}),
+				"id_to_key": make(map[int]string),
 			},
 			"metric_name_to_label_ids": make(map[string][]int),
-			"metric_label_detail_keys": make(map[MetricLabelDetailKey]interface{}),
+			"metric_label_detail_keys": make(map[string]interface{}),
 		}
 		tempCache.MetricLabel.LabelCache.keys.Each(func(lk LabelKey) bool {
-			temp["label_cache"].(map[string]interface{})["keys"].(map[LabelKey]interface{})[lk] = struct{}{}
+			temp["label_cache"].(map[string]interface{})["keys"].(map[string]interface{})[marshal(lk)] = struct{}{}
 			return true
 		})
 		tempCache.MetricLabel.LabelCache.idToKey.Range(func(key, value any) bool {
-			temp["label_cache"].(map[string]interface{})["id_to_key"].(map[int]LabelKey)[key.(int)] = value.(LabelKey)
+			temp["label_cache"].(map[string]interface{})["id_to_key"].(map[int]string)[key.(int)] = marshal(value)
 			return true
 		})
 		for k, v := range tempCache.MetricLabel.metricNameToLabelIDs {
 			temp["metric_name_to_label_ids"].(map[string][]int)[k] = v
 		}
 		tempCache.MetricLabel.metricLabelDetailKeys.Each(func(mldk MetricLabelDetailKey) bool {
-			temp["metric_label_detail_keys"].(map[MetricLabelDetailKey]interface{})[mldk] = struct{}{}
+			temp["metric_label_detail_keys"].(map[string]interface{})[marshal(mldk)] = struct{}{}
 			return true
 		})
-		if len(temp["label_cache"].(map[string]interface{})["keys"].(map[LabelKey]interface{})) > 0 ||
-			len(temp["label_cache"].(map[string]interface{})["id_to_key"].(map[int]LabelKey)) > 0 ||
+		if len(temp["label_cache"].(map[string]interface{})["keys"].(map[string]interface{})) > 0 ||
+			len(temp["label_cache"].(map[string]interface{})["id_to_key"].(map[int]string)) > 0 ||
 			len(temp["metric_name_to_label_ids"].(map[string][]int)) > 0 ||
-			len(temp["metric_label_detail_keys"].(map[MetricLabelDetailKey]interface{})) > 0 {
+			len(temp["metric_label_detail_keys"].(map[string]interface{})) > 0 {
 			content["metric_label"] = temp
 		}
 	}
 	getMetricTarget := func() {
 		temp := map[string]interface{}{
-			"metric_target_keys": make(map[MetricTargetKey]interface{}),
+			"metric_target_keys": make(map[string]interface{}),
 		}
 		tempCache.MetricTarget.metricTargetKeys.Each(func(mtk MetricTargetKey) bool {
-			temp["metric_target_keys"].(map[MetricTargetKey]interface{})[mtk] = struct{}{}
+			temp["metric_target_keys"].(map[string]interface{})[marshal(mtk)] = struct{}{}
 			return true
 		})
-		if len(temp["metric_target_keys"].(map[MetricTargetKey]interface{})) > 0 {
+		if len(temp["metric_target_keys"].(map[string]interface{})) > 0 {
 			content["metric_target"] = temp
 		}
 	}
@@ -240,9 +243,10 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 		return nil
 	}
 
-	log.Info("len of content:", len(content))
-	b, _ := json.MarshalIndent(content, "", "	")
-	log.Info("len of b: ", len(b), string(b))
+	b, err := json.MarshalIndent(content, "", "	")
+	if err != nil {
+		log.Error(err)
+	}
 	return b
 }
 
