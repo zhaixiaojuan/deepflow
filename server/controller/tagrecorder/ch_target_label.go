@@ -139,7 +139,7 @@ func (l *ChTargetLabel) generateTargetData() (map[int]string, bool) {
 	}
 
 	for _, prometheusTarget := range prometheusTargets {
-		targetLabelNameValueMap[prometheusTarget.ID] = "instance:" + prometheusTarget.Instance + ", job:" + prometheusTarget.Job + prometheusTarget.OtherLabels
+		targetLabelNameValueMap[prometheusTarget.ID] = "instance:" + prometheusTarget.Instance + ", job:" + prometheusTarget.Job +", " + prometheusTarget.OtherLabels
 
 	}
 
