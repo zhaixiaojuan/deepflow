@@ -238,7 +238,9 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 		return nil
 	}
 
+	log.Info("len of content:", len(content))
 	b, _ := json.MarshalIndent(content, "", "	")
+	log.Info("len of b: ", len(b))
 	return b
 }
 
