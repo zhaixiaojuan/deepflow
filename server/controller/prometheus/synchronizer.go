@@ -172,15 +172,17 @@ func (s *Synchronizer) prepare(req *trident.PrometheusLabelRequest) error {
 			s.tryAppendMetricLabelToAdd(metricLabelsToAdd, mn, ln, lv)
 		}
 		targetID, ok := s.cache.Target.GetIDByKey(cache.NewTargetKey(instanceValue, jobValue))
-		for _, l := range m.GetLabels() {
-			ln := l.GetName()
-			if ln == TargetLabelInstance || ln == TargetLabelJob {
-				continue
-			}
-			s.tryAppendMetricAPPLabelLayoutToEncode(metricAPPLabelLayoutsToE, mn, ln, targetID)
-		}
 		if ok {
+			for _, l := range m.GetLabels() {
+				ln := l.GetName()
+				if ln == TargetLabelInstance || ln == TargetLabelJob {
+					continue
+				}
+				s.tryAppendMetricAPPLabelLayoutToEncode(metricAPPLabelLayoutsToE, mn, ln, targetID)
+			}
 			s.tryAppendMetricTargetToAdd(metricTargetsToAdd, mn, targetID)
+		} else {
+			log.Warningf("target id not found, instance: %s, job: %s", instanceValue, jobValue)
 		}
 	}
 
@@ -322,17 +324,17 @@ func (s *Synchronizer) assembleTarget(ts []*trident.TargetRequest) ([]*trident.T
 		job := t.GetJob()
 		tID, ok := s.cache.Target.GetIDByKey(cache.NewTargetKey(instance, job))
 		if !ok {
-			log.Errorf("target instance: %s, job: %s id not found", instance, job)
+			log.Warningf("target id not found, instance: %s, job: %s", instance, job)
 			continue
 		}
 		insID, ok := s.cache.LabelValue.GetIDByValue(instance)
 		if !ok {
-			log.Errorf("instance label_value: %s id not found", instance)
+			log.Warningf("instance label_value: %s id not found", instance)
 			continue
 		}
 		jobID, ok := s.cache.LabelValue.GetIDByValue(job)
 		if !ok {
-			log.Errorf("job label_value: %s id not found", job)
+			log.Warningf("job label_value: %s id not found", job)
 			continue
 		}
 		respTs = append(respTs, &trident.TargetResponse{

@@ -33,12 +33,12 @@ func NewSynchronizerEvent() *SynchronizerEvent {
 }
 
 func (e *SynchronizerEvent) GetLabelIDs(ctx context.Context, in *trident.PrometheusLabelRequest) (*trident.PrometheusLabelResponse, error) {
-	log.Debugf("PrometheusLabelRequest: %+v", in)
+	log.Infof("PrometheusLabelRequest: %+v", in)
 	resp, err := prometheus.NewSynchronizer().Sync(in)
 	if err != nil {
 		log.Errorf("encode str error: %+v", err)
 		return &trident.PrometheusLabelResponse{}, nil
 	}
-	log.Debugf("PrometheusLabelResponse: %+v", resp)
+	log.Infof("PrometheusLabelResponse: %+v", resp)
 	return resp, err
 }
