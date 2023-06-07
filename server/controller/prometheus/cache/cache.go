@@ -148,11 +148,13 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 		}
 
 		tempCache.Label.idToKey.Range(func(key, value any) bool {
+			log.Infof("key: %v, value: %v", key, value)
 			temp["id_to_key"].(map[int]LabelKey)[key.(int)] = value.(LabelKey)
 			return true
 		})
 
 		tempCache.Label.keys.Each(func(lk LabelKey) bool {
+			log.Infof("%#v,", lk)
 			temp["keys"].(map[LabelKey]interface{})[lk] = struct{}{}
 			return true
 		})
