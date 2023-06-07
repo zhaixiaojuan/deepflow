@@ -158,6 +158,8 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 			temp["keys"].(map[LabelKey]interface{})[lk] = struct{}{}
 			return true
 		})
+		b, _ := json.Marshal(temp)
+		log.Infof("temp: %v", string(b))
 		if len(temp["keys"].(map[LabelKey]interface{})) > 0 ||
 			len(temp["id_to_key"].(map[int]LabelKey)) > 0 {
 			content["label"] = temp
@@ -240,7 +242,7 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 
 	log.Info("len of content:", len(content))
 	b, _ := json.MarshalIndent(content, "", "	")
-	log.Info("len of b: ", len(b))
+	log.Info("len of b: ", len(b), string(b))
 	return b
 }
 
