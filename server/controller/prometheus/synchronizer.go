@@ -155,11 +155,19 @@ func (s *Synchronizer) prepare(req *trident.PrometheusLabelRequest) error {
 	metricTargetsToAdd := mapset.NewSet[cache.MetricTargetKey]()
 	for _, m := range req.GetRequestLabels() {
 		mn := m.GetMetricName()
+		if mn == "" {
+			log.Infof("metric_name is empty")
+			continue
+		}
 		s.tryAppendMetricNameToEncode(metricNamesToE, mn)
 		var instanceValue string
 		var jobValue string
 		for _, l := range m.GetLabels() {
 			ln := l.GetName()
+			if ln == "" {
+				log.Infof("label_name is empty")
+				continue
+			}
 			lv := l.GetValue()
 			s.tryAppendLabelNameToEncode(labelNamesToE, ln)
 			s.tryAppendLabelValueToEncode(labelValuesToE, lv)
