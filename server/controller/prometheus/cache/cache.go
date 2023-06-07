@@ -157,7 +157,7 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 			return true
 		})
 		if len(temp["keys"].(map[LabelKey]interface{})) > 0 ||
-			len(temp["id_to_key"].(map[string]LabelKey)) > 0 {
+			len(temp["id_to_key"].(map[int]LabelKey)) > 0 {
 			content["label"] = temp
 		}
 	}
