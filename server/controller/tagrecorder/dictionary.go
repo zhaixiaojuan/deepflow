@@ -76,7 +76,11 @@ func (c *TagRecorder) UpdateChDictionary() {
 		for _, subset := range subsets {
 			for _, address := range subset.Addresses {
 				clickHouseCfg := c.cfg.ClickHouseCfg
-				clickHouseCfg.Host = address.IP
+				if strings.Contains(address.IP, ":") {
+					clickHouseCfg.Host = fmt.Sprintf("[%s]", address.IP)
+				} else {
+					clickHouseCfg.Host = address.IP
+				}
 				for _, port := range subset.Ports {
 					if port.Name == "tcp-port" {
 						clickHouseCfg.Port = uint32(port.Port)
@@ -128,13 +132,6 @@ func (c *TagRecorder) UpdateChDictionary() {
 							connect.Close()
 							continue
 						}
-						prometheusDistionaries := []string{}
-						if err := connect.Select(&prometheusDistionaries, fmt.Sprintf("SHOW DICTIONARIES IN %s", "prometheus")); err != nil {
-							log.Error(err)
-							connect.Close()
-							continue
-						}
-						dictionaries = append(dictionaries, prometheusDistionaries...)
 						wantedDicts := mapset.NewSet(
 							CH_DICTIONARY_IP_RESOURCE,
 							CH_DICTIONARY_IP_RELATION,
@@ -174,6 +171,7 @@ func (c *TagRecorder) UpdateChDictionary() {
 							CH_DICTIONARY_GPROCESS,
 							CH_DICTIONARY_POD_SERVICE_K8S_LABEL,
 							CH_DICTIONARY_POD_SERVICE_K8S_LABELS,
+
 							CH_TARGET_LABEL,
 							CH_APP_LABEL,
 							CH_PROMETHEUS_LABEL_NAME,
@@ -206,13 +204,7 @@ func (c *TagRecorder) UpdateChDictionary() {
 							chTable := "ch_" + strings.TrimSuffix(dictName, "_map")
 							createSQL := CREATE_SQL_MAP[dictName]
 							mysqlPortStr := strconv.Itoa(int(c.cfg.MySqlCfg.Port))
-							switch dictName {
-							case CH_TARGET_LABEL, CH_APP_LABEL, CH_PROMETHEUS_LABEL_NAME, CH_PROMETHEUS_METRIC_NAME, CH_PROMETHEUS_METRIC_APP_LABEL_LAYOUT:
-								createSQL = fmt.Sprintf(createSQL, "prometheus", dictName, mysqlPortStr, c.cfg.MySqlCfg.UserName, c.cfg.MySqlCfg.UserPassword, replicaSQL, c.cfg.MySqlCfg.Database, chTable, chTable)
-							default:
-								createSQL = fmt.Sprintf(createSQL, c.cfg.ClickHouseCfg.Database, dictName, mysqlPortStr, c.cfg.MySqlCfg.UserName, c.cfg.MySqlCfg.UserPassword, replicaSQL, c.cfg.MySqlCfg.Database, chTable, chTable)
-							}
-							// createSQL = fmt.Sprintf(createSQL, c.cfg.ClickHouseCfg.Database, dictName, mysqlPortStr, c.cfg.MySqlCfg.UserName, c.cfg.MySqlCfg.UserPassword, replicaSQL, c.cfg.MySqlCfg.Database, chTable, chTable)
+							createSQL = fmt.Sprintf(createSQL, c.cfg.ClickHouseCfg.Database, dictName, mysqlPortStr, c.cfg.MySqlCfg.UserName, c.cfg.MySqlCfg.UserPassword, replicaSQL, c.cfg.MySqlCfg.Database, chTable, chTable)
 							log.Infof("create dictionary %s", dictName)
 							log.Info(createSQL)
 							_, err = connect.Exec(createSQL)
@@ -228,15 +220,8 @@ func (c *TagRecorder) UpdateChDictionary() {
 						checkDicts := chDicts.Intersect(wantedDicts)
 						for _, dict := range checkDicts.ToSlice() {
 							dictName := dict.(string)
-							var clickhouseDatabase string
-							switch dictName {
-							case CH_TARGET_LABEL, CH_APP_LABEL, CH_PROMETHEUS_LABEL_NAME, CH_PROMETHEUS_METRIC_NAME, CH_PROMETHEUS_METRIC_APP_LABEL_LAYOUT:
-								clickhouseDatabase = "prometheus"
-							default:
-								clickhouseDatabase = c.cfg.ClickHouseCfg.Database
-							}
 							chTable := "ch_" + strings.TrimSuffix(dictName, "_map")
-							showSQL := fmt.Sprintf("SHOW CREATE DICTIONARY %s.%s", clickhouseDatabase, dictName)
+							showSQL := fmt.Sprintf("SHOW CREATE DICTIONARY %s.%s", c.cfg.ClickHouseCfg.Database, dictName)
 							dictSQL := make([]string, 0)
 							if err := connect.Select(&dictSQL, showSQL); err != nil {
 								log.Error(err)
@@ -245,14 +230,14 @@ func (c *TagRecorder) UpdateChDictionary() {
 							}
 							createSQL := CREATE_SQL_MAP[dictName]
 							mysqlPortStr := strconv.Itoa(int(c.cfg.MySqlCfg.Port))
-							createSQL = fmt.Sprintf(createSQL, clickhouseDatabase, dictName, mysqlPortStr, c.cfg.MySqlCfg.UserName, c.cfg.MySqlCfg.UserPassword, replicaSQL, c.cfg.MySqlCfg.Database, chTable, chTable)
+							createSQL = fmt.Sprintf(createSQL, c.cfg.ClickHouseCfg.Database, dictName, mysqlPortStr, c.cfg.MySqlCfg.UserName, c.cfg.MySqlCfg.UserPassword, replicaSQL, c.cfg.MySqlCfg.Database, chTable, chTable)
 							if createSQL == dictSQL[0] {
 								continue
 							}
 							log.Infof("update dictionary %s", dictName)
 							log.Infof("exist dictionary %s", dictSQL[0])
 							log.Infof("wanted dictionary %s", createSQL)
-							dropSQL := fmt.Sprintf("DROP DICTIONARY %s.%s", clickhouseDatabase, dictName)
+							dropSQL := fmt.Sprintf("DROP DICTIONARY %s.%s", c.cfg.ClickHouseCfg.Database, dictName)
 							_, err = connect.Exec(dropSQL)
 							if err != nil {
 								log.Error(err)
