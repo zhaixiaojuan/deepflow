@@ -48,19 +48,22 @@ func (l *ChPrometheusTargetLabelLayout) generateNewData() (map[IDKey]mysql.ChPro
 
 	keyToItem := make(map[IDKey]mysql.ChPrometheusTargetLabelLayout)
 	for _, prometheusTarget := range prometheusTargets {
-		targetLabels := "'job', '" + prometheusTarget.Job + "', 'instance', '" + prometheusTarget.Instance + "', "
+		targetLabelNames := "job, instance"
+		targetLabelValues := prometheusTarget.Job + ", " + prometheusTarget.Instance
 		otherLabels := strings.Split(prometheusTarget.OtherLabels, ", ")
 		if len(otherLabels) > 0 {
 			for _, otherLabel :=  range otherLabels {
 				if len(strings.Split(otherLabel, ":")) >= 2 {
 					otherLabelItem := strings.SplitN(otherLabel, ":", 2)
-					targetLabels += "'" + otherLabelItem[0] + "', '" + otherLabelItem[1] + "', "
+					targetLabelNames += ", " + otherLabelItem[0] 
+					targetLabelValues += ", " + otherLabelItem[1]
 				}
 			}
 		}
 		keyToItem[IDKey{ID: prometheusTarget.ID}] = mysql.ChPrometheusTargetLabelLayout{
-			TargetID:        prometheusTarget.ID,
-			TargetLabels:    targetLabels,
+			TargetID:            prometheusTarget.ID,
+			TargetLabelNames:    targetLabelNames,
+			TargetLabelValues:   targetLabelValues,
 		}
 
 
@@ -74,9 +77,13 @@ func (l *ChPrometheusTargetLabelLayout) generateKey(dbItem mysql.ChPrometheusTar
 
 func (l *ChPrometheusTargetLabelLayout) generateUpdateInfo(oldItem, newItem mysql.ChPrometheusTargetLabelLayout) (map[string]interface{}, bool) {
 	updateInfo := make(map[string]interface{})
-	if oldItem.TargetLabels != newItem.TargetLabels {
-		updateInfo["target_labels"] = newItem.TargetLabels
+	if oldItem.TargetLabelNames != newItem.TargetLabelNames {
+		updateInfo["target_label_names"] = newItem.TargetLabelNames
 	}
+	if oldItem.TargetLabelValues != newItem.TargetLabelValues {
+		updateInfo["target_label_values"] = newItem.TargetLabelValues
+	}
+
 	if len(updateInfo) > 0 {
 		return updateInfo, true
 	}

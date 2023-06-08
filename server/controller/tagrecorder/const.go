@@ -580,7 +580,8 @@ const (
 	CREATE_PROMETHEUS_TARGET_LABEL_LAYOUT_DICTIONARY_SQL = "CREATE DICTIONARY %s.%s\n" +
 		"(\n" +
 		"    `target_id` UInt64,\n" +
-		"    `target_labels` String\n" +
+		"    `target_label_names` String,\n" +
+		"    `target_label_values` String\n" +
 		")\n" +
 		"PRIMARY KEY target_id\n" +
 		"SOURCE(MYSQL(PORT %s USER '%s' PASSWORD '%s' %s DB %s TABLE %s INVALIDATE_QUERY 'select(select updated_at from %s order by updated_at desc limit 1) as updated_at'))\n" +

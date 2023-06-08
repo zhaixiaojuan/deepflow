@@ -457,6 +457,7 @@ type ChTargetLabel struct {
 }
 
 type ChPrometheusTargetLabelLayout struct {
-	TargetID     int    `gorm:"primaryKey;column:target_id;type:int;not null" json:"TARGET_ID"`
-	TargetLabels string `gorm:"column:target_labels;type:text;not null" json:"TARGET_LABELS"`
+	TargetID          int    `gorm:"primaryKey;column:target_id;type:int;not null" json:"TARGET_ID"`
+	TargetLabelNames  string `gorm:"column:target_label_names;type:text;not null" json:"TARGET_LABEL_NAMES"`
+	TargetLabelValues string `gorm:"column:target_label_values;type:text;not null" json:"TARGET_LABEL_VALUES"`
 }
