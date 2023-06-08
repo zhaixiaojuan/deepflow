@@ -105,6 +105,24 @@ type OSAPPTagsKey struct {
 	PID int
 }
 
+type K8sAnnotationKey struct {
+	ID  int
+	Key string
+}
+
+type K8sAnnotationsKey struct {
+	ID int
+}
+
+type K8sEnvKey struct {
+	ID  int
+	Key string
+}
+
+type K8sEnvsKey struct {
+	ID int
+}
+
 type PrometheusAPPLabelKey struct {
 	MetricID     int
 	LabelNameID  int
@@ -115,4 +133,5 @@ type PrometheusTargetLabelKey struct {
 	MetricID    int
 	LabelNameID int
 	TargetID    int
+
 }
