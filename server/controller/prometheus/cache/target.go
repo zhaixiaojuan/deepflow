@@ -57,7 +57,7 @@ func NewTargetLabelKey(targetID int, labelName string) TargetLabelKey {
 type targetLabelNameToValue map[string]string
 
 type target struct {
-	keyToTargetID     sync.Map
+	keyToTargetID   sync.Map
 	targetLabelKeys mapset.Set[TargetLabelKey]
 }
 

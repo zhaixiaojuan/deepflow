@@ -33,6 +33,9 @@ func NewSynchronizerEvent() *SynchronizerEvent {
 }
 
 func (e *SynchronizerEvent) GetLabelIDs(ctx context.Context, in *trident.PrometheusLabelRequest) (*trident.PrometheusLabelResponse, error) {
+	reqLabelsCount := len(in.GetRequestLabels()) // TODO remove
+	reqTargetsCount := len(in.GetRequestTargets())
+	log.Infof("reqeust labels count: %d, request targets count: %d", reqLabelsCount, reqTargetsCount)
 	if len(in.GetRequestLabels()) != 0 || len(in.GetRequestTargets()) != 0 {
 		log.Infof("PrometheusLabelRequest: %+v", in)
 	}
@@ -44,5 +47,6 @@ func (e *SynchronizerEvent) GetLabelIDs(ctx context.Context, in *trident.Prometh
 	if len(in.GetRequestLabels()) != 0 || len(in.GetRequestTargets()) != 0 {
 		log.Infof("PrometheusLabelResponse: %+v", resp)
 	}
+	log.Infof("response labels count: %d, response targets count: %d", len(resp.GetResponseLabelIds()), len(resp.GetResponseTargetIds()))
 	return resp, err
 }

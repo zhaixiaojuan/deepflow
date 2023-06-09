@@ -38,7 +38,7 @@ func NewLayoutKey(metricName, labelName string) LayoutKey {
 type appLabelNameToValue map[string]string
 
 type metricAndAPPLabelLayout struct {
-	layoutKeyToIndex                sync.Map
+	layoutKeyToIndex sync.Map
 }
 
 func (mll *metricAndAPPLabelLayout) GetIndexByKey(key LayoutKey) (uint8, bool) {
