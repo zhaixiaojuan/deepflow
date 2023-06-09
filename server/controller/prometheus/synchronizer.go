@@ -31,7 +31,7 @@ import (
 	. "github.com/deepflowio/deepflow/server/controller/prometheus/common"
 )
 
-var log = logging.MustGetLogger("prometheus")
+var log = logging.MustGetLogger("prometheus.synchronizer")
 
 type Synchronizer struct {
 	cache   *cache.Cache
@@ -153,6 +153,8 @@ func (s *Synchronizer) prepare(req *trident.PrometheusLabelRequest) error {
 	labelsToAdd := mapset.NewSet[cache.LabelKey]()
 	metricLabelsToAdd := make(map[string]mapset.Set[cache.MetricLabelDetailKey], 0)
 	metricTargetsToAdd := mapset.NewSet[cache.MetricTargetKey]()
+
+	nonTargetKeyToCount := make(map[cache.TargetKey]int, 0) // used to count how many times a nonexistent target key appears, avoid swiping log
 	for _, m := range req.GetRequestLabels() {
 		mn := m.GetMetricName()
 		if mn == "" {
@@ -179,7 +181,8 @@ func (s *Synchronizer) prepare(req *trident.PrometheusLabelRequest) error {
 			s.tryAppendLabelToAdd(labelsToAdd, ln, lv)
 			s.tryAppendMetricLabelToAdd(metricLabelsToAdd, mn, ln, lv)
 		}
-		targetID, ok := s.cache.Target.GetIDByKey(cache.NewTargetKey(instanceValue, jobValue))
+		targetKey := cache.NewTargetKey(instanceValue, jobValue)
+		targetID, ok := s.cache.Target.GetIDByKey(targetKey)
 		if ok {
 			for _, l := range m.GetLabels() {
 				ln := l.GetName()
@@ -190,8 +193,12 @@ func (s *Synchronizer) prepare(req *trident.PrometheusLabelRequest) error {
 			}
 			s.tryAppendMetricTargetToAdd(metricTargetsToAdd, mn, targetID)
 		} else {
-			log.Warningf("target id not found, instance: %s, job: %s", instanceValue, jobValue)
+			nonTargetKeyToCount[targetKey]++
 		}
+	}
+
+	for k, v := range nonTargetKeyToCount {
+		log.Warningf("target id not found, instance: %s, job: %s, count: %d", k.Instance, k.Job, v)
 	}
 
 	if metricNamesToE.Cardinality() == 0 && labelNamesToE.Cardinality() == 0 && labelValuesToE.Cardinality() == 0 &&
@@ -285,11 +292,13 @@ func (s *Synchronizer) assemble(req *trident.PrometheusLabelRequest) (*trident.P
 
 func (s *Synchronizer) assembleMetricLabel(mls []*trident.MetricLabelRequest) ([]*trident.MetricLabelResponse, error) {
 	respMLs := make([]*trident.MetricLabelResponse, 0)
+
+	nonMetricNameToCount := make(map[string]int, 0) // used to count how many times a nonexistent metric name appears, avoid swiping log
 	for _, ml := range mls {
 		mn := ml.GetMetricName()
 		mni, ok := s.cache.MetricName.GetIDByName(mn)
 		if !ok {
-			log.Errorf("metric_name: %s id not found", mn)
+			nonMetricNameToCount[mn]++
 			continue
 		}
 
@@ -321,6 +330,9 @@ func (s *Synchronizer) assembleMetricLabel(mls []*trident.MetricLabelRequest) ([
 			MetricId:   proto.Uint32(uint32(mni)),
 			LabelIds:   rls,
 		})
+	}
+	for k, v := range nonMetricNameToCount {
+		log.Errorf("metric_name: %s id not found, count: %d", k, v)
 	}
 	return respMLs, nil
 }

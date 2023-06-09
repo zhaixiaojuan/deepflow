@@ -24,7 +24,7 @@ import (
 	"github.com/deepflowio/deepflow/server/controller/prometheus"
 )
 
-var log = logging.MustGetLogger("prometheus.grpc")
+var log = logging.MustGetLogger("prometheus.synchronizer.grpc")
 
 type SynchronizerEvent struct{}
 

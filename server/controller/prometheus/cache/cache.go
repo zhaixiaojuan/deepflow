@@ -29,7 +29,7 @@ import (
 	. "github.com/deepflowio/deepflow/server/controller/prometheus/common"
 )
 
-var log = logging.MustGetLogger("prometheus")
+var log = logging.MustGetLogger("prometheus.synchronizer.cache")
 
 var (
 	cacheOnce sync.Once
