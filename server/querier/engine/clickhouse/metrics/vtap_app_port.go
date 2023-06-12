@@ -19,7 +19,7 @@ package metrics
 var VTAP_APP_PORT_METRICS = map[string]*Metrics{}
 
 var VTAP_APP_PORT_METRICS_REPLACE = map[string]*Metrics{
-	"rrt": NewReplaceMetrics("rrt_sum/rrt_count", ""),
+	"rrt": NewReplaceMetrics("rrt_sum/rrt_count", "rrt_count>0"),
 
 	"error_ratio":        NewReplaceMetrics("error/response", ""),
 	"client_error_ratio": NewReplaceMetrics("client_error/response", ""),

@@ -223,6 +223,7 @@ func (f *AggFunction) FormatInnerTag(m *view.Model) (innerAlias string) {
 			Name:       view.FUNCTION_GROUP_ARRAY,
 			Fields:     []view.Node{&view.Field{Value: f.Metrics.DBField}},
 			IgnoreZero: true,
+			Condition:  f.Metrics.Condition,
 		}
 		innerAlias = innerFunction.SetAlias("", true)
 		innerFunction.SetFlag(view.METRICS_FLAG_INNER)
