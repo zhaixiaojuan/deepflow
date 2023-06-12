@@ -126,7 +126,7 @@ func Start() {
 	if err != nil {
 		log.Error(err)
 	}
-	err = stats.RegisterCountableWithModulePrefix("controller.", "trisolaris", GetPrometheusLabelIDsDetailCounter(), stats.OptionStatTags{"grpc_type": "getPrometheusLabelIDsDetailCount"})
+	err = stats.RegisterCountableWithModulePrefix("controller.", "trisolaris", GetPrometheusLabelIDsDetailCounter(), stats.OptionStatTags{"grpc_type": "GetPrometheusLabelIDs"})
 	if err != nil {
 		log.Error(err)
 	}

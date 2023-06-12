@@ -153,9 +153,7 @@ func (s *service) GetPrometheusLabelIDs(ctx context.Context, in *api.PrometheusL
 	defer func() {
 		statsd.AddGrpcCostStatsd(statsd.GetPrometheusLabelIDs, int(time.Now().Sub(startTime).Milliseconds()))
 	}()
-	statsd.GetPrometheusLabelIDsDetailCounter().AddReceiveCount(uint64(len(in.GetRequestLabels())), uint64(len(in.GetRequestTargets())))
 	resp, err := s.prometheusEvent.GetLabelIDs(ctx, in)
-	statsd.GetPrometheusLabelIDsDetailCounter().AddSendCount(uint64(len(resp.GetResponseLabelIds())), uint64(len(resp.GetResponseTargetIds())))
 	return resp, err
 }
 

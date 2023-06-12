@@ -35,30 +35,13 @@ func GetPrometheusLabelIDsDetailCounter() *GetPrometheusLabelIDsCounter {
 	return gplidCounter
 }
 
-type PrometheusLabelIDsCounter struct {
-	ReceiveLabel  uint64 `statsd:"receive_label_count"`
-	ReceiveTarget uint64 `statsd:"receive_target_count"`
-	SendLabelID   uint64 `statsd:"send_label_id_count"`
-	SendTargetID  uint64 `statsd:"send_target_id_count"`
-}
-
-func (c *PrometheusLabelIDsCounter) AddReceiveCount(lc, tc uint64) {
-	atomic.AddUint64(&c.ReceiveLabel, lc)
-	atomic.AddUint64(&c.ReceiveTarget, tc)
-}
-
-func (c *PrometheusLabelIDsCounter) AddSendCount(lc, tc uint64) {
-	atomic.AddUint64(&c.SendLabelID, lc)
-	atomic.AddUint64(&c.SendTargetID, tc)
-}
-
 type GetPrometheusLabelIDsCounter struct {
 	*PrometheusLabelIDsCounter
 }
 
 func NewGetPrometheusLabelIDsCounter() *GetPrometheusLabelIDsCounter {
 	return &GetPrometheusLabelIDsCounter{
-		PrometheusLabelIDsCounter: &PrometheusLabelIDsCounter{},
+		PrometheusLabelIDsCounter: NewPrometheusLabelIDsCounter(),
 	}
 }
 
@@ -70,4 +53,26 @@ func (g *GetPrometheusLabelIDsCounter) GetCounter() interface{} {
 
 func (g *GetPrometheusLabelIDsCounter) Closed() bool {
 	return false
+}
+
+type PrometheusLabelIDsCounter struct {
+	ReceiveMetricCount uint64 `statsd:"receive_metric_count"`
+	ReceiveLabelCount  uint64 `statsd:"receive_label_count"`
+	ReceiveTargetCount uint64 `statsd:"receive_target_count"`
+	SendMetricCount    uint64 `statsd:"send_metric_count"`
+	SendLabelCount     uint64 `statsd:"send_label_count"`
+	SendTargetCount    uint64 `statsd:"send_target_count"`
+}
+
+func NewPrometheusLabelIDsCounter() *PrometheusLabelIDsCounter {
+	return &PrometheusLabelIDsCounter{}
+}
+
+func (c *PrometheusLabelIDsCounter) Fill(pc *PrometheusLabelIDsCounter) {
+	atomic.AddUint64(&c.ReceiveMetricCount, pc.ReceiveMetricCount)
+	atomic.AddUint64(&c.ReceiveLabelCount, pc.ReceiveLabelCount)
+	atomic.AddUint64(&c.ReceiveTargetCount, pc.ReceiveTargetCount)
+	atomic.AddUint64(&c.SendMetricCount, pc.SendMetricCount)
+	atomic.AddUint64(&c.SendLabelCount, pc.SendLabelCount)
+	atomic.AddUint64(&c.SendTargetCount, pc.SendTargetCount)
 }

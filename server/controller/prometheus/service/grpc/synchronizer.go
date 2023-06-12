@@ -22,6 +22,7 @@ import (
 
 	"github.com/deepflowio/deepflow/message/trident"
 	"github.com/deepflowio/deepflow/server/controller/prometheus"
+	"github.com/deepflowio/deepflow/server/controller/trisolaris/services/grpc/statsd"
 )
 
 var log = logging.MustGetLogger("prometheus.synchronizer.grpc")
@@ -39,7 +40,9 @@ func (e *SynchronizerEvent) GetLabelIDs(ctx context.Context, in *trident.Prometh
 	if len(in.GetRequestLabels()) != 0 || len(in.GetRequestTargets()) != 0 {
 		log.Infof("PrometheusLabelRequest: %+v", in)
 	}
-	resp, err := prometheus.NewSynchronizer().Sync(in)
+	statsdRecord := statsd.NewPrometheusLabelIDsCounter()
+	resp, err := prometheus.NewSynchronizer().Sync(in, statsdRecord)
+	statsd.GetPrometheusLabelIDsDetailCounter().Fill(statsdRecord)
 	if err != nil {
 		log.Errorf("encode str error: %+v", err)
 		return &trident.PrometheusLabelResponse{}, nil

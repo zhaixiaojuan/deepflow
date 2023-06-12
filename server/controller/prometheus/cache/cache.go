@@ -27,6 +27,7 @@ import (
 
 	"github.com/deepflowio/deepflow/message/controller"
 	. "github.com/deepflowio/deepflow/server/controller/prometheus/common"
+	"github.com/deepflowio/deepflow/server/controller/prometheus/config"
 )
 
 var log = logging.MustGetLogger("prometheus.synchronizer.cache")
@@ -39,7 +40,8 @@ var (
 type Cache struct {
 	ctx context.Context
 
-	canRefresh chan bool
+	canRefresh           chan bool
+	cacheRefreshInterval time.Duration
 
 	MetricName              *metricName
 	LabelName               *labelName
@@ -67,6 +69,11 @@ func GetSingleton() *Cache {
 		}
 	})
 	return cacheIns
+}
+
+func (c *Cache) Init(ctx context.Context, cfg *config.Config) {
+	c.ctx = ctx
+	c.cacheRefreshInterval = time.Duration(cfg.CacheRefreshInterval) * time.Second
 }
 
 func GetDebugCache(t controller.PrometheusCacheType) []byte {
@@ -250,7 +257,8 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 	return b
 }
 
-func (t *Cache) Start(ctx context.Context) error {
+func (t *Cache) Start(ctx context.Context, cfg *config.Config) error {
+	t.Init(ctx, cfg)
 	if err := t.refresh(false); err != nil {
 		return err
 	}
