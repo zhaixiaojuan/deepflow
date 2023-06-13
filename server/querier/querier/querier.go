@@ -56,7 +56,7 @@ func Start(configPath, serverLogFile string) {
 		os.Exit(0)
 	}
 
-	// prometheus cache
+	// prometheus dict cache
 	go clickhouse.GeneratePrometheusMap()
 
 	// statsd

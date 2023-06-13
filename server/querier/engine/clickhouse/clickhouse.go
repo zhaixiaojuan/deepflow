@@ -25,6 +25,7 @@ import (
 	//"github.com/k0kubun/pp"
 	logging "github.com/op/go-logging"
 	"github.com/xwb1989/sqlparser"
+	"golang.org/x/exp/slices"
 
 	"github.com/deepflowio/deepflow/server/querier/common"
 	"github.com/deepflowio/deepflow/server/querier/config"
@@ -331,6 +332,7 @@ func (e *CHEngine) ParseSlimitSql(sql string, args *common.QuerierParams) (*comm
 			}
 		}
 	}
+	outerWhereLeftSlice = append(outerWhereLeftSlice, outerWhereLeftAppendSlice...)
 	// GroupBy解析
 	if pStmt.GroupBy != nil {
 		for _, group := range pStmt.GroupBy {
@@ -345,7 +347,9 @@ func (e *CHEngine) ParseSlimitSql(sql string, args *common.QuerierParams) (*comm
 					continue
 				}
 				groupTag := sqlparser.String(colName)
-				innerGroupBySlice = append(innerGroupBySlice, groupTag)
+				if slices.Contains(outerWhereLeftSlice, groupTag) {
+					innerGroupBySlice = append(innerGroupBySlice, groupTag)
+				}
 			}
 			funcName, ok := group.(*sqlparser.FuncExpr)
 			if ok {
@@ -353,7 +357,9 @@ func (e *CHEngine) ParseSlimitSql(sql string, args *common.QuerierParams) (*comm
 					continue
 				}
 				groupTag := sqlparser.String(funcName)
-				innerGroupBySlice = append(innerGroupBySlice, groupTag)
+				if slices.Contains(outerWhereLeftSlice, groupTag) {
+					innerGroupBySlice = append(innerGroupBySlice, groupTag)
+				}
 			}
 		}
 	}
@@ -421,7 +427,6 @@ func (e *CHEngine) ParseSlimitSql(sql string, args *common.QuerierParams) (*comm
 	outerEngine.View = view.NewView(outerEngine.Model)
 	outerTransSql := outerEngine.ToSQLString()
 	outerSlice := []string{}
-	outerWhereLeftSlice = append(outerWhereLeftSlice, outerWhereLeftAppendSlice...)
 	outerWhereLeftSql := strings.Join(outerWhereLeftSlice, ",")
 	outerSql := ""
 	// No internal sql required when only star grouping
@@ -588,7 +593,15 @@ func (e *CHEngine) TransFrom(froms sqlparser.TableExprs) error {
 			// ext_metrics只有metrics表，使用virtual_table_name做过滤区分
 			if e.DB == "ext_metrics" {
 				table = "metrics"
-			} else if e.DB == "prometheus" {
+			} else if e.DB == chCommon.DB_NAME_PROMETHEUS {
+				whereStmt := Where{}
+				metricIDFilter, err := GetMetricIDFilter(e.DB, e.Table)
+				if err != nil {
+					return err
+				}
+				filter := view.Filters{Expr: metricIDFilter}
+				whereStmt.filter = &filter
+				e.Statements = append(e.Statements, &whereStmt)
 				table = "samples"
 			}
 			if e.DataSource != "" {
@@ -751,21 +764,21 @@ func (e *CHEngine) parseGroupBy(group sqlparser.Expr) error {
 	// func(field)
 	case *sqlparser.FuncExpr:
 		/* name, args, err := e.parseFunction(expr)
-		if err != nil {
-			return err
-		}
-		err = e.AddFunction(name, args, "", as)
-		return err */
+		 if err != nil {
+			 return err
+		 }
+		 err = e.AddFunction(name, args, "", as)
+		 return err */
 	// field +=*/ field
 	case *sqlparser.BinaryExpr:
 		/* function := expr.Left.(*sqlparser.FuncExpr)
-		name, args, err := e.parseFunction(function)
-		if err != nil {
-			return err
-		}
-		math := expr.Operator
-		math += sqlparser.String(expr.Right)
-		e.AddFunction(name, args, math, as) */
+		 name, args, err := e.parseFunction(function)
+		 if err != nil {
+			 return err
+		 }
+		 math := expr.Operator
+		 math += sqlparser.String(expr.Right)
+		 e.AddFunction(name, args, math, as) */
 	}
 	return nil
 }
@@ -812,14 +825,6 @@ func (e *CHEngine) parseSelectAlias(item *sqlparser.AliasedExpr) error {
 				e.ColumnSchemas[len(e.ColumnSchemas)-1] = common.NewColumnSchema(strings.ReplaceAll(chCommon.ParseAlias(item.Expr), "`", ""), "", labelType)
 			}
 		}
-		whereStmt := Where{}
-		notNullExpr, ok := GetSelectMetricIDFilter(sqlparser.String(expr), as, e.DB, e.Table)
-		if !ok {
-			return nil
-		}
-		filter := view.Filters{Expr: notNullExpr}
-		whereStmt.filter = &filter
-		e.Statements = append(e.Statements, &whereStmt)
 		return nil
 	// func(field/tag)
 	case *sqlparser.FuncExpr:
