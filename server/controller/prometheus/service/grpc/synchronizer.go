@@ -34,22 +34,19 @@ func NewSynchronizerEvent() *SynchronizerEvent {
 }
 
 func (e *SynchronizerEvent) GetLabelIDs(ctx context.Context, in *trident.PrometheusLabelRequest) (*trident.PrometheusLabelResponse, error) {
-	reqLabelsCount := len(in.GetRequestLabels()) // TODO remove
-	reqTargetsCount := len(in.GetRequestTargets())
-	log.Infof("reqeust labels count: %d, request targets count: %d", reqLabelsCount, reqTargetsCount)
 	if len(in.GetRequestLabels()) != 0 || len(in.GetRequestTargets()) != 0 {
 		log.Infof("PrometheusLabelRequest: %+v", in)
 	}
-	statsdRecord := statsd.NewPrometheusLabelIDsCounter()
-	resp, err := prometheus.NewSynchronizer().Sync(in, statsdRecord)
-	statsd.GetPrometheusLabelIDsDetailCounter().Fill(statsdRecord)
+	synchronizer := prometheus.NewSynchronizer()
+	resp, err := synchronizer.Sync(in)
+	statsd.GetPrometheusLabelIDsCounterSingleton().Fill(synchronizer.GetStatsdCounter())
+	if len(in.GetRequestLabels()) != 0 || len(in.GetRequestTargets()) != 0 {
+		log.Infof("PrometheusLabelResponse: %+v", resp)
+	}
+	log.Infof("counter detail: %+v", synchronizer.GetStatsdCounter())
 	if err != nil {
 		log.Errorf("encode str error: %+v", err)
 		return &trident.PrometheusLabelResponse{}, nil
 	}
-	if len(in.GetRequestLabels()) != 0 || len(in.GetRequestTargets()) != 0 {
-		log.Infof("PrometheusLabelResponse: %+v", resp)
-	}
-	log.Infof("response labels count: %d, response targets count: %d", len(resp.GetResponseLabelIds()), len(resp.GetResponseTargetIds()))
 	return resp, err
 }

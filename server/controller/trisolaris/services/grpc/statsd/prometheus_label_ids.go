@@ -26,7 +26,7 @@ var (
 	gplidCounter     *GetPrometheusLabelIDsCounter
 )
 
-func GetPrometheusLabelIDsDetailCounter() *GetPrometheusLabelIDsCounter {
+func GetPrometheusLabelIDsCounterSingleton() *GetPrometheusLabelIDsCounter {
 	gplidCounterOnce.Do(func() {
 		gplidCounter = &GetPrometheusLabelIDsCounter{
 			PrometheusLabelIDsCounter: &PrometheusLabelIDsCounter{},
