@@ -72,7 +72,7 @@ func (e *Encoder) Init(ctx context.Context, cfg *prometheuscfg.Config) {
 	e.labelLayout = newLabelLayout()
 	e.metricLabel = newMetricLabel(e.label)
 	e.metricTarget = newMetricTarget()
-	e.refreshInterval = time.Duration(cfg.CacheRefreshInterval) * time.Second
+	e.refreshInterval = time.Duration(cfg.EncoderCacheRefreshInterval) * time.Second
 	return
 }
 

@@ -203,8 +203,10 @@ controller:
     ignore_nic_regex:
 
   prometheus:
-    # cache refresh interval, unit: second
-    cache_refresh_interval: 60
+    # synchronizer cache refresh interval, unit: second
+    synchronizer_cache_refresh_interval: 60
+    # encoder cache refresh interval, unit: second
+    encoder_cache_refresh_interval: 3600
 
 querier:
   # querier http listenport

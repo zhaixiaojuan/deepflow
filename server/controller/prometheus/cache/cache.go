@@ -40,8 +40,8 @@ var (
 type Cache struct {
 	ctx context.Context
 
-	canRefresh           chan bool
-	cacheRefreshInterval time.Duration
+	canRefresh      chan bool
+	refreshInterval time.Duration
 
 	MetricName              *metricName
 	LabelName               *labelName
@@ -73,7 +73,7 @@ func GetSingleton() *Cache {
 
 func (c *Cache) Init(ctx context.Context, cfg *config.Config) {
 	c.ctx = ctx
-	c.cacheRefreshInterval = time.Duration(cfg.CacheRefreshInterval) * time.Second
+	c.refreshInterval = time.Duration(cfg.SynchronizerCacheRefreshInterval) * time.Second
 }
 
 func GetDebugCache(t controller.PrometheusCacheType) []byte {
