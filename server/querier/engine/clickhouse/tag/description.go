@@ -292,70 +292,70 @@ func GetTagDescriptions(db, table, rawSql string, ctx context.Context) (response
 		}
 	}
 
-	// 查询 k8s_annotation
-	podK8sAnnotationRst, err := chClient.DoQuery(&client.QueryParams{
-		Sql: "SELECT key FROM flow_tag.pod_k8s_annotation_map GROUP BY key"})
-	if err != nil {
-		return nil, err
-	}
-	for _, _key := range podK8sAnnotationRst.Values {
-		key := _key.([]interface{})[0]
-		annotationKey := "k8s.annotation." + key.(string)
-		if db == ckcommon.DB_NAME_EXT_METRICS || db == ckcommon.DB_NAME_EVENT || db == ckcommon.DB_NAME_PROFILE || table == "vtap_flow_port" || table == "vtap_app_port" {
-			response.Values = append(response.Values, []interface{}{
-				annotationKey, annotationKey, annotationKey, annotationKey, "map_item",
-				"Custom Tag", tagTypeToOperators["string"], []bool{true, true, true}, "", "",
-			})
-		} else if db != "deepflow_system" && table != "vtap_acl" && table != "l4_packet" && table != "l7_packet" {
-			response.Values = append(response.Values, []interface{}{
-				annotationKey, annotationKey + "_0", annotationKey + "_1", annotationKey, "map_item",
-				"Custom Tag", tagTypeToOperators["string"], []bool{true, true, true}, "", "",
-			})
-		}
-	}
+	// // 查询 k8s_annotation
+	// podK8sAnnotationRst, err := chClient.DoQuery(&client.QueryParams{
+	// 	Sql: "SELECT key FROM flow_tag.pod_k8s_annotation_map GROUP BY key"})
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// for _, _key := range podK8sAnnotationRst.Values {
+	// 	key := _key.([]interface{})[0]
+	// 	annotationKey := "k8s.annotation." + key.(string)
+	// 	if db == ckcommon.DB_NAME_EXT_METRICS || db == ckcommon.DB_NAME_EVENT || db == ckcommon.DB_NAME_PROFILE || table == "vtap_flow_port" || table == "vtap_app_port" {
+	// 		response.Values = append(response.Values, []interface{}{
+	// 			annotationKey, annotationKey, annotationKey, annotationKey, "map_item",
+	// 			"Custom Tag", tagTypeToOperators["string"], []bool{true, true, true}, "", "",
+	// 		})
+	// 	} else if db != "deepflow_system" && table != "vtap_acl" && table != "l4_packet" && table != "l7_packet" {
+	// 		response.Values = append(response.Values, []interface{}{
+	// 			annotationKey, annotationKey + "_0", annotationKey + "_1", annotationKey, "map_item",
+	// 			"Custom Tag", tagTypeToOperators["string"], []bool{true, true, true}, "", "",
+	// 		})
+	// 	}
+	// }
 
-	podServiceK8sAnnotationRst, err := chClient.DoQuery(&client.QueryParams{
-		Sql: "SELECT key FROM flow_tag.pod_service_k8s_annotation_map GROUP BY key"})
-	if err != nil {
-		return nil, err
-	}
-	for _, _key := range podServiceK8sAnnotationRst.Values {
-		key := _key.([]interface{})[0]
-		annotationKey := "k8s.annotation." + key.(string)
-		if db == ckcommon.DB_NAME_EXT_METRICS || db == ckcommon.DB_NAME_EVENT || db == ckcommon.DB_NAME_PROFILE || table == "vtap_flow_port" || table == "vtap_app_port" {
-			response.Values = append(response.Values, []interface{}{
-				annotationKey, annotationKey, annotationKey, annotationKey, "map_item",
-				"Custom Tag", tagTypeToOperators["string"], []bool{true, true, true}, "", "",
-			})
-		} else if db != "deepflow_system" && table != "vtap_acl" && table != "l4_packet" && table != "l7_packet" {
-			response.Values = append(response.Values, []interface{}{
-				annotationKey, annotationKey + "_0", annotationKey + "_1", annotationKey, "map_item",
-				"Custom Tag", tagTypeToOperators["string"], []bool{true, true, true}, "", "",
-			})
-		}
-	}
+	// podServiceK8sAnnotationRst, err := chClient.DoQuery(&client.QueryParams{
+	// 	Sql: "SELECT key FROM flow_tag.pod_service_k8s_annotation_map GROUP BY key"})
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// for _, _key := range podServiceK8sAnnotationRst.Values {
+	// 	key := _key.([]interface{})[0]
+	// 	annotationKey := "k8s.annotation." + key.(string)
+	// 	if db == ckcommon.DB_NAME_EXT_METRICS || db == ckcommon.DB_NAME_EVENT || db == ckcommon.DB_NAME_PROFILE || table == "vtap_flow_port" || table == "vtap_app_port" {
+	// 		response.Values = append(response.Values, []interface{}{
+	// 			annotationKey, annotationKey, annotationKey, annotationKey, "map_item",
+	// 			"Custom Tag", tagTypeToOperators["string"], []bool{true, true, true}, "", "",
+	// 		})
+	// 	} else if db != "deepflow_system" && table != "vtap_acl" && table != "l4_packet" && table != "l7_packet" {
+	// 		response.Values = append(response.Values, []interface{}{
+	// 			annotationKey, annotationKey + "_0", annotationKey + "_1", annotationKey, "map_item",
+	// 			"Custom Tag", tagTypeToOperators["string"], []bool{true, true, true}, "", "",
+	// 		})
+	// 	}
+	// }
 
-	// 查询 k8s_env
-	podK8senvRst, err := chClient.DoQuery(&client.QueryParams{
-		Sql: "SELECT key FROM flow_tag.pod_k8s_env_map GROUP BY key"})
-	if err != nil {
-		return nil, err
-	}
-	for _, _key := range podK8senvRst.Values {
-		key := _key.([]interface{})[0]
-		envKey := "k8s.env." + key.(string)
-		if db == ckcommon.DB_NAME_EXT_METRICS || db == ckcommon.DB_NAME_EVENT || db == ckcommon.DB_NAME_PROFILE || table == "vtap_flow_port" || table == "vtap_app_port" {
-			response.Values = append(response.Values, []interface{}{
-				envKey, envKey, envKey, envKey, "map_item",
-				"Custom Tag", tagTypeToOperators["string"], []bool{true, true, true}, "", "",
-			})
-		} else if db != "deepflow_system" && table != "vtap_acl" && table != "l4_packet" && table != "l7_packet" {
-			response.Values = append(response.Values, []interface{}{
-				envKey, envKey + "_0", envKey + "_1", envKey, "map_item",
-				"Custom Tag", tagTypeToOperators["string"], []bool{true, true, true}, "", "",
-			})
-		}
-	}
+	// // 查询 k8s_env
+	// podK8senvRst, err := chClient.DoQuery(&client.QueryParams{
+	// 	Sql: "SELECT key FROM flow_tag.pod_k8s_env_map GROUP BY key"})
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// for _, _key := range podK8senvRst.Values {
+	// 	key := _key.([]interface{})[0]
+	// 	envKey := "k8s.env." + key.(string)
+	// 	if db == ckcommon.DB_NAME_EXT_METRICS || db == ckcommon.DB_NAME_EVENT || db == ckcommon.DB_NAME_PROFILE || table == "vtap_flow_port" || table == "vtap_app_port" {
+	// 		response.Values = append(response.Values, []interface{}{
+	// 			envKey, envKey, envKey, envKey, "map_item",
+	// 			"Custom Tag", tagTypeToOperators["string"], []bool{true, true, true}, "", "",
+	// 		})
+	// 	} else if db != "deepflow_system" && table != "vtap_acl" && table != "l4_packet" && table != "l7_packet" {
+	// 		response.Values = append(response.Values, []interface{}{
+	// 			envKey, envKey + "_0", envKey + "_1", envKey, "map_item",
+	// 			"Custom Tag", tagTypeToOperators["string"], []bool{true, true, true}, "", "",
+	// 		})
+	// 	}
+	// }
 
 	// 查询cloud.tag
 	chostCloudTagSql := "SELECT key FROM flow_tag.chost_cloud_tag_map GROUP BY key"
@@ -537,7 +537,7 @@ func GetTagValues(db, table, sql string) (*common.Result, []string, error) {
 		sql = showSqlList[0] + " WHERE " + showSqlList[1]
 	}
 	// K8s Labels是动态的,不需要去tag_description里确认
-	if strings.HasPrefix(tag, "k8s.label.") || strings.HasPrefix(tag, "k8s.annotation.") || strings.HasPrefix(tag, "k8s.env.") || strings.HasPrefix(tag, "cloud.tag.") || strings.HasPrefix(tag, "os.app.") {
+	if strings.HasPrefix(tag, "k8s.label.") || strings.HasPrefix(tag, "cloud.tag.") || strings.HasPrefix(tag, "os.app.") {
 		return GetTagResourceValues(db, table, sql)
 	}
 	// 外部字段是动态的,不需要去tag_description里确认
