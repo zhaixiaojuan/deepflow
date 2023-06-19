@@ -93,7 +93,7 @@ func (b *UpdaterBase[MT, KT]) Refresh() {
 				for key, updateDBItem := range updateDBItem {
 					updateTimeInfo := make(map[string]interface{})
 					now := time.Now()
-					updateTimeInfo["updated_at"] = now.Format("2023-01-01 12:12:12")
+					updateTimeInfo["updated_at"] = now.Format("2006-01-02 15:04:05")
 					b.update(updateDBItem, updateTimeInfo, key)
 				}
 			}
