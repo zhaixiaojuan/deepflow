@@ -29,7 +29,7 @@ type ChResourceUpdater interface {
 	// 直接查询ch表，构建旧的ch数据
 	// 遍历新的ch数据，若key不在旧的ch数据中，则新增；否则检查是否有更新，若有更新，则更新
 	// 遍历旧的ch数据，若key不在新的ch数据中，则删除
-	Refresh()
+	Refresh() string
 	SetConfig(cfg config.TagRecorderConfig)
 }
 
@@ -52,13 +52,14 @@ func (b *UpdaterBase[MT, KT]) SetConfig(cfg config.TagRecorderConfig) {
 	b.cfg = cfg
 }
 
-func (b *UpdaterBase[MT, KT]) Refresh() {
+func (b *UpdaterBase[MT, KT]) Refresh() string {
 	newKeyToDBItem, newOK := b.dataGenerator.generateNewData()
 	oldKeyToDBItem, oldOK := b.generateOldData()
 	keysToAdd := []KT{}
 	itemsToAdd := []MT{}
 	keysToDelete := []KT{}
 	itemsToDelete := []MT{}
+	prometheusLabelType := ""
 	if newOK && oldOK {
 		for key, newDBItem := range newKeyToDBItem {
 			oldDBItem, exists := oldKeyToDBItem[key]
@@ -69,11 +70,21 @@ func (b *UpdaterBase[MT, KT]) Refresh() {
 				updateInfo, ok := b.dataGenerator.generateUpdateInfo(oldDBItem, newDBItem)
 				if ok {
 					b.update(oldDBItem, updateInfo, key)
+					if prometheusLabelType != "app" && b.resourceTypeName == RESOURCE_TYPE_CH_APP_LABEL {
+						prometheusLabelType = "app"
+					} else if prometheusLabelType != "target" && b.resourceTypeName == RESOURCE_TYPE_CH_TARGET_LABEL {
+						prometheusLabelType = "target"
+					}
 				}
 			}
 		}
 		if len(itemsToAdd) > 0 {
 			b.operateBatch(keysToAdd, itemsToAdd, b.add)
+			if prometheusLabelType != "app" && b.resourceTypeName == RESOURCE_TYPE_CH_APP_LABEL {
+				prometheusLabelType = "app"
+			} else if prometheusLabelType != "target" && b.resourceTypeName == RESOURCE_TYPE_CH_TARGET_LABEL {
+				prometheusLabelType = "target"
+			}
 		}
 
 		for key, oldDBItem := range oldKeyToDBItem {
@@ -85,6 +96,11 @@ func (b *UpdaterBase[MT, KT]) Refresh() {
 		}
 		if len(itemsToDelete) > 0 {
 			b.operateBatch(keysToDelete, itemsToDelete, b.delete)
+			if prometheusLabelType != "app" && b.resourceTypeName == RESOURCE_TYPE_CH_APP_LABEL {
+				prometheusLabelType = "app"
+			} else if prometheusLabelType != "target" && b.resourceTypeName == RESOURCE_TYPE_CH_TARGET_LABEL {
+				prometheusLabelType = "target"
+			}
 		}
 
 		if len(itemsToDelete) > 0 && len(itemsToAdd) == 0 {
@@ -99,6 +115,7 @@ func (b *UpdaterBase[MT, KT]) Refresh() {
 			}
 		}
 	}
+	return prometheusLabelType
 }
 
 func (b *UpdaterBase[MT, KT]) generateOldData() (map[KT]MT, bool) {

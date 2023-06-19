@@ -119,6 +119,10 @@ func (c *TagRecorder) refresh(domainLcuuidToIconID map[string]int, resourceTypeT
 	}
 	for _, updater := range updaters {
 		updater.SetConfig(c.cfg.TagRecorderCfg)
-		updater.Refresh()
+		prometheusLabelType := updater.Refresh()
+		if prometheusLabelType != "" {
+			time.Sleep(time.Duration(c.cfg.TagRecorderCfg.DictionaryRefreshInterval+10) * time.Second)
+			c.RefreshLiveView(prometheusLabelType)
+		}
 	}
 }
