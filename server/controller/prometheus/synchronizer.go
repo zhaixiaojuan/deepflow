@@ -17,6 +17,8 @@
 package prometheus
 
 import (
+	"time"
+
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/golang/protobuf/proto"
 	"github.com/op/go-logging"
@@ -64,20 +66,26 @@ func (s *Synchronizer) GetStatsdCounter() *statsd.PrometheusLabelIDsCounter {
 
 func (s *Synchronizer) assembleFully() (*trident.PrometheusLabelResponse, error) {
 	defer s.cache.Clear()
+	t1 := time.Now()
 	err := s.cache.RefreshFully()
 	if err != nil {
 		return nil, err
 	}
+	log.Infof("RefreshFully: %v", time.Since(t1))
 	resp := new(trident.PrometheusLabelResponse)
+	t2 := time.Now()
 	mls, err := s.assembleMetricLabelFully()
 	if err != nil {
 		return nil, errors.Wrap(err, "assembleLabelFully")
 	}
+	log.Infof("assembleMetricLabelFully: %v", time.Since(t2))
 	resp.ResponseLabelIds = mls
+	t3 := time.Now()
 	ts, err := s.assembleTargetFully()
 	if err != nil {
 		return nil, errors.Wrap(err, "assembleTargetFully")
 	}
+	log.Infof("assembleTargetFully: %v", time.Since(t3))
 	resp.ResponseTargetIds = ts
 	return resp, err
 }
