@@ -250,8 +250,10 @@ func promReaderTransToSQL(ctx context.Context, req *prompb.ReadRequest) (context
 			if strings.HasPrefix(matcher.Name, "tag_") {
 				tagName := removeTagPrefix(matcher.Name)
 				filters = append(filters, fmt.Sprintf("`tag.%s` %s '%s'", tagName, operation, matcher.Value))
-				// for prometheus native tag, append in query for analysis (findout if tag is target_label)
-				metricsArray = append(metricsArray, fmt.Sprintf("`tag.%s`", tagName))
+				// if config.Cfg.Prometheus.RequestQueryWithDebug {
+				// 	// for prometheus native tag, append in query for analysis (findout if tag is target_label)
+				// 	metricsArray = append(metricsArray, fmt.Sprintf("`tag.%s`", tagName))
+				// }
 			} else {
 				// convert k8s label tag to query tag
 				tagName := convertToQuerierAllowedTagName(matcher.Name)
