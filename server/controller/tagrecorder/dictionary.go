@@ -324,7 +324,7 @@ func (c *TagRecorder) RefreshLiveView(label_type string) {
 								continue
 							}
 							log.Infof("refresh live view app_label_live_view in (%s: %d)", address.IP, clickHouseCfg.Port)
-							appLabelSql := "ALTER LIVE VIEW flow_tag.app_label_live_view"
+							appLabelSql := "ALTER LIVE VIEW flow_tag.app_label_live_view REFRESH"
 							_, err = connect.Exec(appLabelSql)
 							if err != nil {
 								log.Error(err)
@@ -339,7 +339,7 @@ func (c *TagRecorder) RefreshLiveView(label_type string) {
 								continue
 							}
 							log.Infof("refresh live view target_label_live_view in (%s: %d)", address.IP, clickHouseCfg.Port)
-							targetLabelSql := "ALTER LIVE VIEW flow_tag.target_label_live_view"
+							targetLabelSql := "ALTER LIVE VIEW flow_tag.target_label_live_view REFRESH"
 							_, err = connect.Exec(targetLabelSql)
 							if err != nil {
 								log.Error(err)
