@@ -147,6 +147,7 @@ func (s *Synchronizer) assembleTargetFully() ([]*trident.TargetResponse, error) 
 			InstanceId: proto.Uint32(uint32(tInstanceID)),
 			JobId:      proto.Uint32(uint32(tJobID)),
 			TargetId:   proto.Uint32(uint32(targetID)),
+			MetricIds:  s.cache.MetricTarget.GetMetricIDsByTargetID(targetID),
 		})
 		s.statsdCounter.SendTargetCount++
 		return true

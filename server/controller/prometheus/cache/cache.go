@@ -55,17 +55,18 @@ type Cache struct {
 
 func GetSingleton() *Cache {
 	cacheOnce.Do(func() {
+		mn := new(metricName)
 		l := newLabel()
 		cacheIns = &Cache{
 			canRefresh:              make(chan bool, 1),
-			MetricName:              &metricName{},
-			LabelName:               &labelName{},
-			LabelValue:              &labelValue{},
-			MetricAndAPPLabelLayout: &metricAndAPPLabelLayout{},
+			MetricName:              mn,
+			LabelName:               new(labelName),
+			LabelValue:              new(labelValue),
+			MetricAndAPPLabelLayout: new(metricAndAPPLabelLayout),
 			Target:                  newTarget(),
 			Label:                   l,
 			MetricLabel:             newMetricLabel(l),
-			MetricTarget:            newMetricTarget(),
+			MetricTarget:            newMetricTarget(mn),
 		}
 	})
 	return cacheIns
@@ -295,9 +296,11 @@ LOOP:
 
 func (c *Cache) refresh() error {
 	log.Info("refresh cache started")
-	c.Label.refresh()
+	egRunAhead := &errgroup.Group{}
+	AppendErrGroup(egRunAhead, c.MetricName.refresh)
+	AppendErrGroup(egRunAhead, c.Label.refresh)
+	egRunAhead.Wait()
 	eg := &errgroup.Group{}
-	AppendErrGroup(eg, c.MetricName.refresh)
 	AppendErrGroup(eg, c.LabelName.refresh)
 	AppendErrGroup(eg, c.LabelValue.refresh)
 	AppendErrGroup(eg, c.MetricAndAPPLabelLayout.refresh)

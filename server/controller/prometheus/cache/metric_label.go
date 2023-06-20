@@ -77,15 +77,16 @@ func (ml *metricLabel) refresh(args ...interface{}) error {
 	if err != nil {
 		return err
 	}
+	metricNameToLabelIDs := make(map[string][]int)
 	for _, item := range metricLabels {
-		if _, ok := ml.LabelCache.GetKeyByID(item.LabelID); ok {
-			ml.metricNameToLabelIDs[item.MetricName] = append(ml.metricNameToLabelIDs[item.MetricName], item.LabelID)
-		}
 		if lk, ok := ml.LabelCache.GetKeyByID(item.LabelID); ok {
 			ml.metricLabelDetailKeys.Add(NewMetricLabelDetailKey(item.MetricName, lk.Name, lk.Value))
 		}
-
+		if _, ok := ml.LabelCache.GetKeyByID(item.LabelID); ok {
+			metricNameToLabelIDs[item.MetricName] = append(metricNameToLabelIDs[item.MetricName], item.LabelID)
+		}
 	}
+	ml.metricNameToLabelIDs = metricNameToLabelIDs
 	return nil
 }
 
