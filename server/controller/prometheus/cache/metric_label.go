@@ -37,14 +37,14 @@ func NewMetricLabelDetailKey(metricName, labelName, labelValue string) MetricLab
 }
 
 type metricLabel struct {
-	LabelCache            *label
+	labelCache            *label
 	metricLabelDetailKeys mapset.Set[MetricLabelDetailKey] // for metric_label check
 	metricNameToLabelIDs  map[string][]int                 // only for fully assembled
 }
 
 func newMetricLabel(l *label) *metricLabel {
 	return &metricLabel{
-		LabelCache:            l,
+		labelCache:            l,
 		metricLabelDetailKeys: mapset.NewSet[MetricLabelDetailKey](),
 		metricNameToLabelIDs:  make(map[string][]int),
 	}
@@ -58,7 +58,7 @@ func (ml *metricLabel) GetLabelsByMetricName(metricName string) []LabelKey {
 	var ret []LabelKey
 	if labelIDs, ok := ml.metricNameToLabelIDs[metricName]; ok {
 		for _, labelID := range labelIDs {
-			if labelKey, ok := ml.LabelCache.GetKeyByID(labelID); ok {
+			if labelKey, ok := ml.labelCache.GetKeyByID(labelID); ok {
 				ret = append(ret, labelKey)
 			}
 		}
@@ -79,10 +79,10 @@ func (ml *metricLabel) refresh(args ...interface{}) error {
 	}
 	metricNameToLabelIDs := make(map[string][]int)
 	for _, item := range metricLabels {
-		if lk, ok := ml.LabelCache.GetKeyByID(item.LabelID); ok {
+		if lk, ok := ml.labelCache.GetKeyByID(item.LabelID); ok {
 			ml.metricLabelDetailKeys.Add(NewMetricLabelDetailKey(item.MetricName, lk.Name, lk.Value))
 		}
-		if _, ok := ml.LabelCache.GetKeyByID(item.LabelID); ok {
+		if _, ok := ml.labelCache.GetKeyByID(item.LabelID); ok {
 			metricNameToLabelIDs[item.MetricName] = append(metricNameToLabelIDs[item.MetricName], item.LabelID)
 		}
 	}

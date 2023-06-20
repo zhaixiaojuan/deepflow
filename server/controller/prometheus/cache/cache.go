@@ -185,11 +185,11 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 			"metric_name_to_label_ids": make(map[string][]int),
 			"metric_label_detail_keys": make(map[string]interface{}),
 		}
-		tempCache.MetricLabel.LabelCache.keys.Each(func(lk LabelKey) bool {
+		tempCache.MetricLabel.labelCache.keys.Each(func(lk LabelKey) bool {
 			temp["label_cache"].(map[string]interface{})["keys"].(map[string]interface{})[marshal(lk)] = struct{}{}
 			return true
 		})
-		tempCache.MetricLabel.LabelCache.idToKey.Range(func(key, value any) bool {
+		tempCache.MetricLabel.labelCache.idToKey.Range(func(key, value any) bool {
 			temp["label_cache"].(map[string]interface{})["id_to_key"].(map[int]string)[key.(int)] = marshal(value)
 			return true
 		})

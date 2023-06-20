@@ -282,6 +282,7 @@ func (s *Synchronizer) prepare(req *trident.PrometheusLabelRequest) error {
 	AppendErrGroup(eg, s.addMetricAPPLabelLayoutCache, syncResp.GetMetricAppLabelLayouts())
 	AppendErrGroup(eg, s.addLabelCache, syncResp.GetLabels())
 	AppendErrGroup(eg, s.addMetricLabelCache, metricLabelsToAdd)
+	AppendErrGroup(eg, s.addMetricTargetCache, metricTargetsToAdd)
 	return eg.Wait()
 }
 
@@ -475,7 +476,7 @@ func (s *Synchronizer) tryAppendMetricTargetToAdd(toAdd mapset.Set[cache.MetricT
 }
 
 func (s *Synchronizer) addMetricTargetCache(arg ...interface{}) error {
-	ts := arg[0].([]cache.MetricTargetKey)
+	ts := arg[0].(mapset.Set[cache.MetricTargetKey]).ToSlice()
 	s.cache.MetricTarget.Add(ts)
 	return nil
 }
