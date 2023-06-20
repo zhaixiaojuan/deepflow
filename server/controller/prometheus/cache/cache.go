@@ -260,7 +260,7 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 func (c *Cache) Start(ctx context.Context, cfg *config.Config) error {
 	c.Init(ctx, cfg)
 	c.canRefresh <- true
-	if err := c.tryRefresh(false); err != nil {
+	if err := c.tryRefresh(); err != nil {
 		return err
 	}
 	go func() {
@@ -268,7 +268,7 @@ func (c *Cache) Start(ctx context.Context, cfg *config.Config) error {
 		for {
 			select {
 			case <-ticker.C:
-				c.tryRefresh(false)
+				c.tryRefresh()
 			case <-ctx.Done():
 				return
 			}
@@ -277,12 +277,12 @@ func (c *Cache) Start(ctx context.Context, cfg *config.Config) error {
 	return nil
 }
 
-func (c *Cache) tryRefresh(fully bool) (err error) {
+func (c *Cache) tryRefresh() (err error) {
 LOOP:
 	for {
 		select {
 		case <-c.canRefresh:
-			err = c.refresh(fully)
+			err = c.refresh()
 			c.canRefresh <- true
 			break LOOP
 		default:
@@ -293,29 +293,19 @@ LOOP:
 	return
 }
 
-func (c *Cache) refresh(fully bool) error {
+func (c *Cache) refresh() error {
 	log.Info("refresh cache started")
-	c.Label.refresh(fully)
+	c.Label.refresh()
 	eg := &errgroup.Group{}
-	AppendErrGroup(eg, c.MetricName.refresh, fully)
-	AppendErrGroup(eg, c.LabelName.refresh, fully)
-	AppendErrGroup(eg, c.LabelValue.refresh, fully)
-	AppendErrGroup(eg, c.MetricAndAPPLabelLayout.refresh, fully)
-	AppendErrGroup(eg, c.MetricLabel.refresh, fully)
-	AppendErrGroup(eg, c.Target.refresh, fully)
-	AppendErrGroup(eg, c.MetricTarget.refresh, fully)
+	AppendErrGroup(eg, c.MetricName.refresh)
+	AppendErrGroup(eg, c.LabelName.refresh)
+	AppendErrGroup(eg, c.LabelValue.refresh)
+	AppendErrGroup(eg, c.MetricAndAPPLabelLayout.refresh)
+	AppendErrGroup(eg, c.MetricLabel.refresh)
+	AppendErrGroup(eg, c.Target.refresh)
+	AppendErrGroup(eg, c.MetricTarget.refresh)
 	err := eg.Wait()
 	log.Info("refresh cache completed")
 	return err
 
-}
-
-func (c *Cache) RefreshFully() error {
-	c.Clear()
-	err := c.tryRefresh(true)
-	return err
-}
-
-func (c *Cache) Clear() {
-	c.MetricLabel.clear()
 }

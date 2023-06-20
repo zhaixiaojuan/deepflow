@@ -77,13 +77,9 @@ func (ml *metricLabel) refresh(args ...interface{}) error {
 	if err != nil {
 		return err
 	}
-	fully := args[0].(bool)
 	for _, item := range metricLabels {
-		if fully {
-			if _, ok := ml.LabelCache.GetKeyByID(item.LabelID); ok {
-				ml.metricNameToLabelIDs[item.MetricName] = append(ml.metricNameToLabelIDs[item.MetricName], item.LabelID)
-			}
-			continue
+		if _, ok := ml.LabelCache.GetKeyByID(item.LabelID); ok {
+			ml.metricNameToLabelIDs[item.MetricName] = append(ml.metricNameToLabelIDs[item.MetricName], item.LabelID)
 		}
 		if lk, ok := ml.LabelCache.GetKeyByID(item.LabelID); ok {
 			ml.metricLabelDetailKeys.Add(NewMetricLabelDetailKey(item.MetricName, lk.Name, lk.Value))
@@ -97,8 +93,4 @@ func (ml *metricLabel) load() ([]*mysql.PrometheusMetricLabel, error) {
 	var metricLabels []*mysql.PrometheusMetricLabel
 	err := mysql.Db.Find(&metricLabels).Error
 	return metricLabels, err
-}
-
-func (ml *metricLabel) clear() {
-	ml.metricNameToLabelIDs = make(map[string][]int)
 }

@@ -65,13 +65,6 @@ func (s *Synchronizer) GetStatsdCounter() *statsd.PrometheusLabelIDsCounter {
 }
 
 func (s *Synchronizer) assembleFully() (*trident.PrometheusLabelResponse, error) {
-	defer s.cache.Clear()
-	t1 := time.Now()
-	err := s.cache.RefreshFully()
-	if err != nil {
-		return nil, err
-	}
-	log.Infof("RefreshFully: %v", time.Since(t1))
 	resp := new(trident.PrometheusLabelResponse)
 	t2 := time.Now()
 	mls, err := s.assembleMetricLabelFully()
