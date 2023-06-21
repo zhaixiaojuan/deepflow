@@ -209,13 +209,18 @@ func GetDebugCache(t controller.PrometheusCacheType) []byte {
 	}
 	getMetricTarget := func() {
 		temp := map[string]interface{}{
-			"metric_target_keys": make(map[string]interface{}),
+			"metric_target_keys":      make(map[string]interface{}),
+			"target_id_to_metric_ids": make(map[int][]uint32),
 		}
 		tempCache.MetricTarget.metricTargetKeys.Each(func(mtk MetricTargetKey) bool {
 			temp["metric_target_keys"].(map[string]interface{})[marshal(mtk)] = struct{}{}
 			return true
 		})
-		if len(temp["metric_target_keys"].(map[string]interface{})) > 0 {
+		for k, v := range tempCache.MetricTarget.targetIDToMetricIDs {
+			temp["target_id_to_metric_ids"].(map[int][]uint32)[k] = v
+		}
+		if len(temp["metric_target_keys"].(map[string]interface{})) > 0 ||
+			len(temp["target_id_to_metric_ids"].(map[int][]uint32)) > 0 {
 			content["metric_target"] = temp
 		}
 	}
