@@ -242,8 +242,10 @@ func promReaderTransToSQL(ctx context.Context, req *prompb.ReadRequest) (context
 				metricsArray = append(metricsArray, tagName)
 			} else {
 				filters = append(filters, fmt.Sprintf("`tag.%s` %s '%s'", matcher.Name, operation, matcher.Value))
-				// append in query for analysis (findout if tag is target_label)
-				metricsArray = append(metricsArray, fmt.Sprintf("`tag.%s`", matcher.Name))
+				// if config.Cfg.Prometheus.RequestQueryWithDebug {
+				// 	// append in query for analysis (findout if tag is target_label)
+				// 	metricsArray = append(metricsArray, fmt.Sprintf("`tag.%s`", matcher.Name))
+				// }
 			}
 		default:
 			// deepflow metrics (vtap_app/flow_part/edge_part & ext_metrics & prometheus)
