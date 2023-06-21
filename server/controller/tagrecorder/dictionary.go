@@ -261,7 +261,7 @@ func (c *TagRecorder) UpdateChDictionary() {
 	return
 }
 
-func (c *TagRecorder) RefreshLiveView(label_type string) {
+func (c *TagRecorder) RefreshLiveView() {
 	log.Info("tagrecorder refresh live view")
 	kubeconfig := c.cfg.Kubeconfig
 	var config *rest.Config
@@ -316,36 +316,34 @@ func (c *TagRecorder) RefreshLiveView(label_type string) {
 						if err != nil {
 							continue
 						}
-						if label_type == "app" {
-							_, err = connect.Exec(CREATE_APP_LABEL_LIVE_VIEW_SQL)
-							if err != nil {
-								log.Error(err)
-								connect.Close()
-								continue
-							}
-							log.Infof("refresh live view app_label_live_view in (%s: %d)", address.IP, clickHouseCfg.Port)
-							appLabelSql := "ALTER LIVE VIEW flow_tag.app_label_live_view REFRESH"
-							_, err = connect.Exec(appLabelSql)
-							if err != nil {
-								log.Error(err)
-								connect.Close()
-								continue
-							}
-						} else {
-							_, err = connect.Exec(CREATE_TARGET_LABEL_LIVE_VIEW_SQL)
-							if err != nil {
-								log.Error(err)
-								connect.Close()
-								continue
-							}
-							log.Infof("refresh live view target_label_live_view in (%s: %d)", address.IP, clickHouseCfg.Port)
-							targetLabelSql := "ALTER LIVE VIEW flow_tag.target_label_live_view REFRESH"
-							_, err = connect.Exec(targetLabelSql)
-							if err != nil {
-								log.Error(err)
-								connect.Close()
-								continue
-							}
+						_, err = connect.Exec(CREATE_APP_LABEL_LIVE_VIEW_SQL)
+						if err != nil {
+							log.Error(err)
+							connect.Close()
+							continue
+						}
+						log.Infof("refresh live view app_label_live_view in (%s: %d)", address.IP, clickHouseCfg.Port)
+						appLabelSql := "ALTER LIVE VIEW flow_tag.app_label_live_view REFRESH"
+						_, err = connect.Exec(appLabelSql)
+						if err != nil {
+							log.Error(err)
+							connect.Close()
+							continue
+						}
+
+						_, err = connect.Exec(CREATE_TARGET_LABEL_LIVE_VIEW_SQL)
+						if err != nil {
+							log.Error(err)
+							connect.Close()
+							continue
+						}
+						log.Infof("refresh live view target_label_live_view in (%s: %d)", address.IP, clickHouseCfg.Port)
+						targetLabelSql := "ALTER LIVE VIEW flow_tag.target_label_live_view REFRESH"
+						_, err = connect.Exec(targetLabelSql)
+						if err != nil {
+							log.Error(err)
+							connect.Close()
+							continue
 						}
 						connect.Close()
 					}
