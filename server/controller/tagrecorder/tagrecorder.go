@@ -18,6 +18,7 @@ package tagrecorder
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	logging "github.com/op/go-logging"
@@ -121,10 +122,14 @@ func (c *TagRecorder) refresh(domainLcuuidToIconID map[string]int, resourceTypeT
 		updater.SetConfig(c.cfg.TagRecorderCfg)
 		isUpdate := updater.Refresh()
 		if isUpdate {
+			var wg sync.WaitGroup
+			wg.Add(1)
 			go func() {
-				time.Sleep(time.Duration(c.cfg.TagRecorderCfg.DictionaryRefreshInterval+10) * time.Second)
+				defer wg.Done()
+				time.After(time.Duration(c.cfg.TagRecorderCfg.DictionaryRefreshInterval+10) * time.Second)
 				c.RefreshLiveView()
 			}()
+			wg.Wait()
 		}
 	}
 }
