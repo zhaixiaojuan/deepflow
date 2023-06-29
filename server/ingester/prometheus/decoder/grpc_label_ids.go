@@ -137,6 +137,7 @@ func NewPrometheusLabelTable(controllerIPs []string, port, rpcMaxMsgSize int) *P
 }
 
 func (t *PrometheusLabelTable) RequesteLabelIDs(request *trident.PrometheusLabelRequest) (*trident.PrometheusLabelResponse, error) {
+	log.Infof("lizf request===:%s", request)
 	t.counter.RequestCount++
 	t.counter.RequestLabelsCount += int64(len(request.GetRequestLabels()))
 	var response *trident.PrometheusLabelResponse
@@ -159,6 +160,7 @@ func (t *PrometheusLabelTable) RequesteLabelIDs(request *trident.PrometheusLabel
 	t.counter.ResponseLabelsCount += int64(len(response.GetResponseLabelIds()))
 	t.counter.RequestTotalDelayNs += int64(time.Since(requestStart))
 	t.updatePrometheusLabels(response)
+	log.Infof("lizf response===:%s", response)
 
 	return response, nil
 }
@@ -170,6 +172,8 @@ func (t *PrometheusLabelTable) RequesteAllLabelIDs() {
 		log.Warning("request all prometheus label ids failed: %s", err)
 	}
 	log.Infof("prometheus request all label IDs end. %s", t.statsString())
+	log.Infof("lizf metric target %s", t.targetString(""))
+	log.Infof("lizf metric target %s", t.metricTargetString(""))
 }
 
 func (t *PrometheusLabelTable) updatePrometheusLabels(resp *trident.PrometheusLabelResponse) {
@@ -345,6 +349,24 @@ func (t *PrometheusLabelTable) targetString(filter string) string {
 	return sb.String()
 }
 
+func (t *PrometheusLabelTable) metricTargetString(filter string) string {
+	sb := &strings.Builder{}
+	sb.WriteString("\nmetricId     targetId\n")
+	sb.WriteString("---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n")
+
+	t.metricTargetPair.Range(func(k uint64, v struct{}) bool {
+		metricId := k >> 32
+		targetId := k << (64 - METRICID_OFFSET) >> (64 - METRICID_OFFSET)
+		row := fmt.Sprintf("%-10d     %-10d\n",  metricId, targetId)
+		if strings.Contains(row, filter) {
+			sb.WriteString(row)
+		}
+		return true
+
+	})
+	return sb.String()
+}
+
 func getStringMapMaxValue(m *hashmap.Map[string, uint32]) uint32 {
 	maxId := uint32(0)
 	m.Range(func(n string, i uint32) bool {
@@ -392,7 +414,7 @@ func (t *PrometheusLabelTable) HandleSimpleCommand(op uint16, arg string) string
 	case "column":
 		return t.columnIndexString(arg)
 	case "target":
-		return t.targetString(arg)
+		return t.targetString(arg) + "\n" + t.metricTargetString(arg)
 	case "stats":
 		return t.statsString()
 	case "test":
