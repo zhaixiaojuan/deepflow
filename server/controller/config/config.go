@@ -26,7 +26,6 @@ import (
 
 	"github.com/deepflowio/deepflow/server/controller/db/clickhouse"
 	mysql "github.com/deepflowio/deepflow/server/controller/db/mysql/config"
-	"github.com/deepflowio/deepflow/server/controller/db/redis"
 	genesis "github.com/deepflowio/deepflow/server/controller/genesis/config"
 	http "github.com/deepflowio/deepflow/server/controller/http/config"
 	manager "github.com/deepflowio/deepflow/server/controller/manager/config"
@@ -86,7 +85,7 @@ type ControllerConfig struct {
 	FPermit      FPermit      `yaml:"fpermit"`
 
 	MySqlCfg      mysql.MySqlConfig           `yaml:"mysql"`
-	RedisCfg      redis.RedisConfig           `yaml:"redis"`
+	RedisCfg      RedisConfig                 `yaml:"redis"`
 	ClickHouseCfg clickhouse.ClickHouseConfig `yaml:"clickhouse"`
 
 	Roze Roze          `yaml:"roze"`
@@ -100,6 +99,18 @@ type ControllerConfig struct {
 	TagRecorderCfg tagrecorder.TagRecorderConfig `yaml:"tagrecorder"`
 	PrometheusCfg  prometheus.Config             `yaml:"prometheus"`
 	HTTPCfg        http.HTTPConfig               `yaml:"http"`
+}
+
+type RedisConfig struct {
+	ResourceAPIDatabase       int      `default:"1" yaml:"resource_api_database"`
+	ResourceAPIExpireInterval int      `default:"3600" yaml:"resource_api_expire_interval"`
+	DimensionResourceDatabase int      `default:"2" yaml:"dimension_resource_database"`
+	Host                      []string `default:"" yaml:"host"` // TODO add default value
+	Port                      uint32   `default:"6379" yaml:"port"`
+	Password                  string   `default:"deepflow" yaml:"password"`
+	TimeOut                   uint32   `default:"30" yaml:"timeout"`
+	Enabled                   bool     `default:"false" yaml:"enabled"`
+	ClusterEnabled            bool     `default:"false" yaml:"cluster_enabled"`
 }
 
 type Config struct {

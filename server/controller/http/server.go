@@ -98,7 +98,7 @@ func (s *Server) RegisterRouters() {
 		router.NewPlugin(),
 		resource.NewDomain(s.controllerConfig),
 		resource.NewVPC(),
-		resource.NewPod(s.controllerConfig.HTTPCfg, s.controllerConfig.RedisCfg, s.controllerConfig.FPermit),
+		resource.NewRouterPod(s.controllerConfig.HTTPCfg, s.controllerConfig.RedisCfg, s.controllerConfig.FPermit),
 		resource.NewProcess(s.controllerConfig.RedisCfg),
 	} {
 		i.RegisterTo(s.engine)

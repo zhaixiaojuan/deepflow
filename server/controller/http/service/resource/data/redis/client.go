@@ -33,8 +33,9 @@ type Client struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	cfg    dbredis.RedisConfig
-	db     redis.UniversalClient
-	sf     singleflight.Group
+	data *Data
+	db   redis.UniversalClient
+	sf   singleflight.Group
 }
 
 func newClient(cfg dbredis.RedisConfig) *Client {

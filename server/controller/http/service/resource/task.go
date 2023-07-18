@@ -33,7 +33,7 @@ func GetTask(id int) (map[string]interface{}, error) {
 }
 
 func CreateTask() (map[string]interface{}, error) {
-	return nil
+	return nil, nil
 }
 
 func callMasterController() {
@@ -41,7 +41,8 @@ func callMasterController() {
 }
 
 func curIsMaster() (bool, error) {
-	curCtrlIP := common.GetCurrentControllerIP()
+	var curCtrlIP string
+	// curCtrlIP := common.GetCurrentControllerIP()
 	masterCtrlIP, _, _, err := common.GetMasterControllerHostPort()
 	return curCtrlIP == masterCtrlIP, err
 }

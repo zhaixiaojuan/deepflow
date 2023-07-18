@@ -44,8 +44,9 @@ func DebugRouter(e *gin.Engine, m *manager.Manager, g *genesis.Genesis) {
 	e.GET("/v1/recorders/:domainLcuuid/:subDomainLcuuid/cache/diff-bases/:resourceType/", getRecorderDiffBaseDataSetByResourceType(m))
 	e.GET("/v1/recorders/:domainLcuuid/:subDomainLcuuid/cache/diff-bases/:resourceType/:resourceLcuuid/", getRecorderDiffBase(m))
 	e.GET("/v1/recorders/:domainLcuuid/:subDomainLcuuid/cache/tool-maps/:field/", getRecorderCacheToolMap(m))
+}
 
-	type Debug struct {
+type Debug struct {
 	m *manager.Manager
 	g *genesis.Genesis
 }

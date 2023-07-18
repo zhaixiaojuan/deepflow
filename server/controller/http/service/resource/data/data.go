@@ -14,45 +14,63 @@
  * limitations under the License.
  */
 
-package redis
+package data
 
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
-	"github.com/deepflowio/deepflow/server/controller/config"
+	"github.com/baidubce/bce-sdk-go/util/log"
 	"github.com/go-redis/redis/v9"
+	"github.com/google/wire"
 	"github.com/op/go-logging"
+
+	"github.com/deepflowio/deepflow/server/controller/config"
 )
 
-var log = logging.MustGetLogger("db.redis")
-var (
-	redisClientOnce sync.Once
-	RedisDB         *RedisClient
-)
+// ProviderSet is data providers.
+var ProviderSet = wire.NewSet(NewData, NewRedisCmd)
 
-type RedisConfig struct {
-	ResourceAPIDatabase       int      `default:"1" yaml:"resource_api_database"`
-	ResourceAPIExpireInterval int      `default:"3600" yaml:"resource_api_expire_interval"`
-	DimensionResourceDatabase int      `default:"2" yaml:"dimension_resource_database"`
-	Host                      []string `default:"" yaml:"host"` // TODO add default value
-	Port                      uint32   `default:"6379" yaml:"port"`
-	Password                  string   `default:"deepflow" yaml:"password"`
-	TimeOut                   uint32   `default:"30" yaml:"timeout"`
-	Enabled                   bool     `default:"false" yaml:"enabled"`
-	ClusterEnabled            bool     `default:"false" yaml:"cluster_enabled"`
+type Data struct {
+	// db       *gorm.DB
+	redisCli *Redis
 }
 
-func GetClient() *RedisClient {
-	return RedisDB
-}
-
-type RedisClient struct {
+type Redis struct {
 	ResourceAPI       redis.UniversalClient
 	DimensionResource redis.UniversalClient
-	Config            *config.RedisConfig
+}
+
+func NewRedisCmd(conf *config.ControllerConfig) *Redis {
+	log := logging.MustGetLogger("config.redis")
+	cfg := conf.RedisCfg
+	client := &Redis{
+		ResourceAPI:       createUniversalRedisClient(cfg, cfg.ResourceAPIDatabase),
+		DimensionResource: createUniversalRedisClient(cfg, cfg.DimensionResourceDatabase),
+	}
+
+	timeout, cancelFunc := context.WithTimeout(context.Background(), time.Second*time.Duration(cfg.TimeOut))
+	defer cancelFunc()
+	err := client.ResourceAPI.Ping(timeout).Err()
+	if err != nil {
+		log.Fatalf("redis(resource api) connect error: %v", err)
+	}
+	timeout, cancelFunc = context.WithTimeout(context.Background(), time.Second*time.Duration(cfg.TimeOut))
+	defer cancelFunc()
+	if err = client.DimensionResource.Ping(timeout).Err(); err != nil {
+		log.Fatalf("redis(dimension resource) connect error: %v", err)
+	}
+
+	return client
+}
+
+func NewData(redis *Redis) (*Data, error) {
+	d := &Data{
+		// db:       db,
+		redisCli: redis,
+	}
+	return d, nil
 }
 
 func generateAddrs(cfg config.RedisConfig) []string {
@@ -98,20 +116,4 @@ func createUniversalRedisClient(cfg config.RedisConfig, database int) redis.Univ
 	} else {
 		return createSimpleClient(cfg, database)
 	}
-}
-
-func InitRedis(cfg config.RedisConfig, ctx context.Context) (err error) { // TODO ctx as first param
-	redisClientOnce.Do(func() {
-		RedisDB = &RedisClient{
-			ResourceAPI:       createUniversalRedisClient(cfg, cfg.ResourceAPIDatabase),
-			DimensionResource: createUniversalRedisClient(cfg, cfg.DimensionResourceDatabase),
-		}
-		_, err = RedisDB.ResourceAPI.Ping(ctx).Result()
-		if err != nil {
-			return
-		}
-		_, err = RedisDB.DimensionResource.Ping(ctx).Result()
-		return
-	})
-	return
 }

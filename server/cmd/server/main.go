@@ -29,6 +29,7 @@ import (
 	"syscall"
 
 	"github.com/deepflowio/deepflow/server/common"
+	"github.com/deepflowio/deepflow/server/controller/config"
 	"github.com/deepflowio/deepflow/server/controller/controller"
 	"github.com/deepflowio/deepflow/server/controller/report"
 	"github.com/deepflowio/deepflow/server/controller/trisolaris/utils"
@@ -130,9 +131,17 @@ func main() {
 
 	shared := common.NewControllerIngesterShared()
 
-	go controller.Start(ctx, *configPath, cfg.LogFile, shared)
+	serverConf := config.DefaultConfig()
+	serverConf.Load(*configPath)
+	go controller.Start(ctx, &serverConf.ControllerConfig, cfg.LogFile, shared)
 
 	go querier.Start(*configPath, cfg.LogFile)
+
+	err := initResource(&serverConf.ControllerConfig)
+	if err != nil {
+		log.Fatalf("wire error: %v", err)
+	}
+
 	closers := ingester.Start(*configPath, shared)
 
 	common.NewMonitor()

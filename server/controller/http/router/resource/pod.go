@@ -28,21 +28,21 @@ import (
 	"github.com/deepflowio/deepflow/server/controller/http/service/resource"
 )
 
-type Pod struct {
+type RouterPod struct {
 	httpConfig    HTTPConfig
 	redisConfig   redis.RedisConfig
 	fpermitConfig config.FPermit
 }
 
-func NewPod(hCfg HTTPConfig, rCfg redis.RedisConfig, fCfg config.FPermit) *Pod {
-	return &Pod{httpConfig: hCfg, redisConfig: rCfg, fpermitConfig: fCfg}
+func NewRouterPod(hCfg HTTPConfig, rCfg redis.RedisConfig, fCfg config.FPermit) *RouterPod {
+	return &RouterPod{httpConfig: hCfg, redisConfig: rCfg, fpermitConfig: fCfg}
 }
 
-func (p *Pod) RegisterTo(ge *gin.Engine) {
+func (p *RouterPod) RegisterTo(ge *gin.Engine) {
 	ge.GET("/v2/pods/", p.Get)
 }
 
-func (p *Pod) Get(c *gin.Context) {
+func (p *RouterPod) Get(c *gin.Context) {
 	headerV := NewHeaderValidator(c.Request.Header)
 	queryV := NewQueryValidator[model.PodQuery](c.Request.URL.Query())
 	validator := NewCombinedValidator(headerV, queryV)
@@ -63,6 +63,6 @@ func (p *Pod) Get(c *gin.Context) {
 	}
 }
 
-func (p *Pod) Update(c *gin.Context) {
+func (p *RouterPod) Update(c *gin.Context) {
 
 }

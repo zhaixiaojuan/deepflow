@@ -57,12 +57,8 @@ var log = logging.MustGetLogger("controller")
 
 type Controller struct{}
 
-func Start(ctx context.Context, configPath, serverLogFile string, shared *servercommon.ControllerIngesterShared) {
+func Start(ctx context.Context, cfg *config.ControllerConfig, serverLogFile string, shared *servercommon.ControllerIngesterShared) {
 	flag.Parse()
-
-	serverCfg := config.DefaultConfig()
-	serverCfg.Load(configPath)
-	cfg := &serverCfg.ControllerConfig
 	bytes, _ := yaml.Marshal(cfg)
 	log.Info("==================== Launching DeepFlow-Server-Controller ====================")
 	log.Infof("controller config:\n%s", string(bytes))

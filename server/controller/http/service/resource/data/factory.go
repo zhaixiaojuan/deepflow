@@ -18,14 +18,14 @@ package data
 
 import (
 	"github.com/deepflowio/deepflow/server/controller/common"
-	"github.com/deepflowio/deepflow/server/controller/db/redis"
+	"github.com/deepflowio/deepflow/server/controller/config"
 	mysqldp "github.com/deepflowio/deepflow/server/controller/http/service/resource/data/mysql"
 	"github.com/deepflowio/deepflow/server/controller/http/service/resource/data/provider"
 	redisdp "github.com/deepflowio/deepflow/server/controller/http/service/resource/data/redis"
 )
 
 // 根据资源类型获取不用类型的数据提供者
-func GetDataProvider(rt string, cfg redis.RedisConfig) provider.DataProvider {
+func GetDataProvider(rt string, cfg config.RedisConfig) provider.DataProvider {
 	switch rt {
 	case common.RESOURCE_TYPE_AZ_EN:
 		return mysqldp.NewAZ()
