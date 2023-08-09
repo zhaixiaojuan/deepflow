@@ -28,6 +28,7 @@ import (
 	logging "github.com/op/go-logging"
 
 	controller_common "github.com/deepflowio/deepflow/server/controller/common"
+	ingester_common "github.com/deepflowio/deepflow/server/ingester/profile/common"
 	"github.com/deepflowio/deepflow/server/querier/config"
 	"github.com/deepflowio/deepflow/server/querier/profile/common"
 	"github.com/deepflowio/deepflow/server/querier/profile/model"
@@ -51,8 +52,8 @@ func Tracing(args model.ProfileTracing, cfg *config.QuerierConfig) (result []*mo
 	body := map[string]interface{}{}
 	body["db"] = common.DATABASE_PROFILE
 	sql := fmt.Sprintf(
-		"SELECT %s, %s, %s, %s FROM %s WHERE %s LIMIT %d",
-		common.PROFILE_LOCATION_STR, common.PROFILE_NODE_ID, common.PROFILE_PARENT_NODE_ID, common.PROFILE_VALUE, common.TABLE_PROFILE, whereSql, limitSql,
+		"SELECT %s, %s FROM %s WHERE %s LIMIT %d",
+		common.PROFILE_LOCATION_STR, common.PROFILE_VALUE, common.TABLE_PROFILE, whereSql, limitSql,
 	)
 	body["sql"] = sql
 	profileDebug := model.Debug{}
@@ -73,11 +74,8 @@ func Tracing(args model.ProfileTracing, cfg *config.QuerierConfig) (result []*mo
 	profileDebug.QueryTime = resp.Get("debug").Get("query_time").MustString()
 	formatStartTime := time.Now()
 	profileLocationStrIndex := -1
-	profileNodeIDIndex := -1
-	profileParentNodeIDIndex := -1
 	profileValueIndex := -1
 	NodeIDToProfileTree := map[string]*model.ProfileTreeNode{}
-	profileNodeIDToNodeID := map[int]string{}
 	columns := resp.GetPath("result", "columns")
 	values := resp.GetPath("result", "values")
 	for columnIndex := range columns.MustArray() {
@@ -85,15 +83,11 @@ func Tracing(args model.ProfileTracing, cfg *config.QuerierConfig) (result []*mo
 		switch column {
 		case "profile_location_str":
 			profileLocationStrIndex = columnIndex
-		case "profile_node_id":
-			profileNodeIDIndex = columnIndex
-		case "profile_parent_node_id":
-			profileParentNodeIDIndex = columnIndex
 		case "profile_value":
 			profileValueIndex = columnIndex
 		}
 	}
-	indexOK := slices.Contains[int]([]int{profileLocationStrIndex, profileNodeIDIndex, profileParentNodeIDIndex, profileValueIndex}, -1)
+	indexOK := slices.Contains[int]([]int{profileLocationStrIndex, profileValueIndex}, -1)
 	if indexOK {
 		log.Error("Not all fields found")
 		err = errors.New("Not all fields found")
@@ -102,65 +96,55 @@ func Tracing(args model.ProfileTracing, cfg *config.QuerierConfig) (result []*mo
 	// merge profile_node_ids, profile_parent_node_ids, self_value
 	for valueIndex := range values.MustArray() {
 		profileLocationStr := values.GetIndex(valueIndex).GetIndex(profileLocationStrIndex).MustString()
-		nodeID := controller_common.GenerateUUID(profileLocationStr)
-		profileNodeID := values.GetIndex(valueIndex).GetIndex(profileNodeIDIndex).MustInt()
-		profileParentNodeID := values.GetIndex(valueIndex).GetIndex(profileParentNodeIDIndex).MustInt()
+		dst := make([]byte, 0, len(profileLocationStr))
+		profileLocationStrByte, _ := ingester_common.ZstdDecompress(dst, []byte(profileLocationStr))
+		profileLocationStrSlice := strings.Split(string(profileLocationStrByte), ";")
 		profileValue := values.GetIndex(valueIndex).GetIndex(profileValueIndex).MustInt()
-		existNode, ok := NodeIDToProfileTree[nodeID]
-		if ok {
-			ok = slices.Contains[int](existNode.ProfileNodeIDS, profileNodeID)
-			if !ok {
-				existNode.ProfileNodeIDS = append(existNode.ProfileNodeIDS, profileNodeID)
+		for profileLocationIndex := range profileLocationStrSlice {
+			nodeProfileValue := 0
+			if profileLocationIndex == len(profileLocationStrSlice)-1 {
+				nodeProfileValue = profileValue
 			}
-			ok = slices.Contains[int](existNode.ProfileParentNodeIDS, profileParentNodeID)
-			if !ok && profileParentNodeID != 0 {
-				existNode.ProfileParentNodeIDS = append(existNode.ProfileParentNodeIDS, profileParentNodeID)
-			}
-			existNode.SelfValue += profileValue
-			existNode.TotalValue = existNode.SelfValue
-		} else {
-			node := NewProfileTreeNode(profileLocationStr, nodeID, profileNodeID, profileValue)
-			if profileParentNodeID == 0 {
-				node.ProfileParentNodeIDS = []int{}
-			} else {
-				node.ProfileParentNodeIDS = []int{profileParentNodeID}
-			}
-			NodeIDToProfileTree[nodeID] = node
-			profileNodeIDToNodeID[profileNodeID] = nodeID
-			result = append(result, node)
-		}
-	}
-	// update parent_node_ids
-	for _, node := range NodeIDToProfileTree {
-		for _, profileParentNodeID := range node.ProfileParentNodeIDS {
-			parentNodeID, ok := profileNodeIDToNodeID[profileParentNodeID]
+			profileLocationStrs := strings.Join(profileLocationStrSlice[:profileLocationIndex+1], ";")
+			nodeID := controller_common.GenerateUUID(profileLocationStrs)
+			existNode, ok := NodeIDToProfileTree[nodeID]
 			if ok {
-				node.ParentNodeIDS = append(node.ParentNodeIDS, parentNodeID)
+				existNode.SelfValue += nodeProfileValue
+				existNode.TotalValue = existNode.SelfValue
+			} else {
+				node := NewProfileTreeNode(profileLocationStrs, nodeID, nodeProfileValue)
+				if profileLocationIndex == 0 {
+					node.ParentNodeID = ""
+				} else {
+					parentProfileLocationStrs := strings.Join(profileLocationStrSlice[:profileLocationIndex], ";")
+					node.ParentNodeID = controller_common.GenerateUUID(parentProfileLocationStrs)
+				}
+				NodeIDToProfileTree[nodeID] = node
 			}
 		}
 	}
+
+	rootTotalValue := 0
 	// update total_value
 	for _, node := range NodeIDToProfileTree {
-		nodeIDs := []string{node.NodeID}
-		parentNode := &model.ProfileTreeNode{}
-		UpdateNodeTotalValue(nodeIDs, node, parentNode, NodeIDToProfileTree)
+		if node.SelfValue == 0 {
+			continue
+		}
+		rootTotalValue += node.SelfValue
+		parentNode, ok := NodeIDToProfileTree[node.ParentNodeID]
+		if ok {
+			UpdateNodeTotalValue(node, parentNode, NodeIDToProfileTree)
+		}
 	}
-	var noZeroResult []*model.ProfileTreeNode
 	// format root node
+	rootNode := NewProfileTreeNode("", "", 0)
+	rootNode.ParentNodeID = "-1"
+	rootNode.TotalValue = rootTotalValue
+
+	result = append(result, rootNode)
 	for _, node := range NodeIDToProfileTree {
-		if len(node.ParentNodeIDS) == 0 {
-			node.ParentNodeIDS = append(node.ParentNodeIDS, "")
-		}
-		// remove debug information
-		if !args.Debug {
-			node.ProfileNodeIDS = node.ProfileNodeIDS[:0]
-			node.ProfileParentNodeIDS = node.ProfileParentNodeIDS[:0]
-		}
-		if node.SelfValue != 0 || node.TotalValue != 0 {
-			noZeroResult = append(noZeroResult, node)
-		}
+		result = append(result, node)
 	}
-	result = noZeroResult
 	formatEndTime := int64(time.Since(formatStartTime))
 	formatTime := fmt.Sprintf("%.9fs", float64(formatEndTime)/1e9)
 	profileDebug.FormatTime = formatTime
@@ -168,31 +152,22 @@ func Tracing(args model.ProfileTracing, cfg *config.QuerierConfig) (result []*mo
 	return
 }
 
-func NewProfileTreeNode(profileLocationStr string, nodeID string, profileNodeID int, profileValue int) *model.ProfileTreeNode {
+func NewProfileTreeNode(profileLocationStrs string, nodeID string, profileValue int) *model.ProfileTreeNode {
 	node := &model.ProfileTreeNode{}
-	node.ProfileLocationStr = profileLocationStr
+	node.ProfileLocationStrs = profileLocationStrs
 	node.NodeID = nodeID
-	node.ProfileNodeIDS = []int{profileNodeID}
 	node.SelfValue = profileValue
 	node.TotalValue = profileValue
 	return node
 }
 
-func UpdateNodeTotalValue(nodeIDs []string, node *model.ProfileTreeNode, parentNode *model.ProfileTreeNode, NodeIDToProfileTree map[string]*model.ProfileTreeNode) {
-	if parentNode.ProfileLocationStr != "" {
-		ok := slices.Contains[string](nodeIDs, parentNode.NodeID)
-		if len(node.ParentNodeIDS) == 0 || ok {
-			return
-		}
-		parentNode.TotalValue += node.SelfValue
-		nodeIDs = append(nodeIDs, parentNode.NodeID)
-	} else {
-		parentNode = node
+func UpdateNodeTotalValue(node *model.ProfileTreeNode, parentNode *model.ProfileTreeNode, NodeIDToProfileTree map[string]*model.ProfileTreeNode) {
+	parentNode.TotalValue += node.SelfValue
+	if parentNode.ParentNodeID == "" {
+		return
 	}
-	for _, parentNodeID := range parentNode.ParentNodeIDS {
-		parentNode, ok := NodeIDToProfileTree[parentNodeID]
-		if ok {
-			UpdateNodeTotalValue(nodeIDs, node, parentNode, NodeIDToProfileTree)
-		}
+	newParentNode, ok := NodeIDToProfileTree[parentNode.ParentNodeID]
+	if ok {
+		UpdateNodeTotalValue(parentNode, newParentNode, NodeIDToProfileTree)
 	}
 }

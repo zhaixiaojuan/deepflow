@@ -28,13 +28,11 @@ type ProfileTracing struct {
 }
 
 type ProfileTreeNode struct {
-	ProfileLocationStr   string   `json:"profile_location_str"`
-	NodeID               string   `json:"node_id"`
-	ProfileNodeIDS       []int    `json:"profile_node_ids"`
-	ParentNodeIDS        []string `json:"parent_node_ids"`
-	ProfileParentNodeIDS []int    `json:"profile_parent_node_ids"`
-	SelfValue            int      `json:"self_value"`
-	TotalValue           int      `json:"total_value"`
+	ProfileLocationStrs string `json:"profile_location_strs"`
+	NodeID              string `json:"node_id"`
+	ParentNodeID        string `json:"parent_node_id"`
+	SelfValue           int    `json:"self_value"`
+	TotalValue          int    `json:"total_value"`
 }
 
 type Debug struct {
