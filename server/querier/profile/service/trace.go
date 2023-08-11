@@ -19,7 +19,7 @@ package service
 import (
 	"errors"
 	"fmt"
-	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,7 +29,9 @@ import (
 
 	controller_common "github.com/deepflowio/deepflow/server/controller/common"
 	ingester_common "github.com/deepflowio/deepflow/server/ingester/profile/common"
+	querier_common "github.com/deepflowio/deepflow/server/querier/common"
 	"github.com/deepflowio/deepflow/server/querier/config"
+	"github.com/deepflowio/deepflow/server/querier/engine/clickhouse"
 	"github.com/deepflowio/deepflow/server/querier/profile/common"
 	"github.com/deepflowio/deepflow/server/querier/profile/model"
 )
@@ -48,43 +50,45 @@ func Tracing(args model.ProfileTracing, cfg *config.QuerierConfig) (result []*mo
 	}
 	whereSql := strings.Join(whereSlice, " AND")
 	limitSql := cfg.Profile.FlameQueryLimit
-	url := fmt.Sprintf("http://%s/v1/query/?debug=true", net.JoinHostPort("localhost", fmt.Sprintf("%d", cfg.ListenPort)))
-	body := map[string]interface{}{}
-	body["db"] = common.DATABASE_PROFILE
 	sql := fmt.Sprintf(
 		"SELECT %s, %s FROM %s WHERE %s LIMIT %d",
 		common.PROFILE_LOCATION_STR, common.PROFILE_VALUE, common.TABLE_PROFILE, whereSql, limitSql,
 	)
-	body["sql"] = sql
+	querierArgs := querier_common.QuerierParams{
+		DB:      common.DATABASE_PROFILE,
+		Sql:     sql,
+		Debug:   strconv.FormatBool(args.Debug),
+		Context: args.Context,
+	}
+	ckEngine := &clickhouse.CHEngine{DB: querierArgs.DB}
+	ckEngine.Init()
+	querierResult, querierDebug, err := ckEngine.ExecuteQuery(&querierArgs)
+	if err != nil {
+		log.Errorf("ExecuteQuery failed: %v", querierDebug, err)
+		return
+	}
 	profileDebug := model.Debug{}
 	profileDebug.Sql = sql
-	resp, err := controller_common.CURLPerform("POST", url, body)
-	if err != nil {
-		log.Errorf("call querier failed: %s, %s", err.Error(), url)
-		return
-	}
-	if len(resp.Get("result").MustMap()) == 0 {
-		log.Warningf("no data in curl response: %s", url)
-		return
-	}
-	profileDebug.IP = resp.Get("debug").Get("ip").MustString()
-	profileDebug.QueryUUID = resp.Get("debug").Get("query_uuid").MustString()
-	profileDebug.SqlCH = resp.Get("debug").Get("sql").MustString()
-	profileDebug.Error = resp.Get("debug").Get("error").MustString()
-	profileDebug.QueryTime = resp.Get("debug").Get("query_time").MustString()
+	profileDebug.IP = querierDebug["ip"].(string)
+	profileDebug.QueryUUID = querierDebug["query_uuid"].(string)
+	profileDebug.SqlCH = querierDebug["sql"].(string)
+	profileDebug.Error = querierDebug["error"].(string)
+	profileDebug.QueryTime = querierDebug["query_time"].(string)
 	formatStartTime := time.Now()
 	profileLocationStrIndex := -1
 	profileValueIndex := -1
 	NodeIDToProfileTree := map[string]*model.ProfileTreeNode{}
-	columns := resp.GetPath("result", "columns")
-	values := resp.GetPath("result", "values")
-	for columnIndex := range columns.MustArray() {
-		column := columns.GetIndex(columnIndex).MustString()
-		switch column {
-		case "profile_location_str":
-			profileLocationStrIndex = columnIndex
-		case "profile_value":
-			profileValueIndex = columnIndex
+	columns := querierResult.Columns
+	values := querierResult.Values
+	for columnIndex, col := range columns {
+		switch column := col.(type) {
+		case string:
+			switch column {
+			case "profile_location_str":
+				profileLocationStrIndex = columnIndex
+			case "profile_value":
+				profileValueIndex = columnIndex
+			}
 		}
 	}
 	indexOK := slices.Contains[int]([]int{profileLocationStrIndex, profileValueIndex}, -1)
@@ -94,50 +98,63 @@ func Tracing(args model.ProfileTracing, cfg *config.QuerierConfig) (result []*mo
 		return
 	}
 	// merge profile_node_ids, profile_parent_node_ids, self_value
-	for valueIndex := range values.MustArray() {
-		profileLocationStr := values.GetIndex(valueIndex).GetIndex(profileLocationStrIndex).MustString()
-		dst := make([]byte, 0, len(profileLocationStr))
-		profileLocationStrByte, _ := ingester_common.ZstdDecompress(dst, []byte(profileLocationStr))
-		profileLocationStrSlice := strings.Split(string(profileLocationStrByte), ";")
-		profileValue := values.GetIndex(valueIndex).GetIndex(profileValueIndex).MustInt()
-		for profileLocationIndex := range profileLocationStrSlice {
-			nodeProfileValue := 0
-			if profileLocationIndex == len(profileLocationStrSlice)-1 {
-				nodeProfileValue = profileValue
+	rootTotalValue := 0
+	for _, value := range values {
+		switch valueSlice := value.(type) {
+		case []interface{}:
+			profileLocationStr := ""
+			if profileLocation, ok := valueSlice[profileLocationStrIndex].(string); ok {
+				profileLocationStr = profileLocation
 			}
-			profileLocationStrs := strings.Join(profileLocationStrSlice[:profileLocationIndex+1], ";")
-			nodeID := controller_common.GenerateUUID(profileLocationStrs)
-			existNode, ok := NodeIDToProfileTree[nodeID]
-			if ok {
-				existNode.SelfValue += nodeProfileValue
-				existNode.TotalValue = existNode.SelfValue
-			} else {
-				node := NewProfileTreeNode(profileLocationStrs, nodeID, nodeProfileValue)
-				if profileLocationIndex == 0 {
-					node.ParentNodeID = ""
-				} else {
-					parentProfileLocationStrs := strings.Join(profileLocationStrSlice[:profileLocationIndex], ";")
-					node.ParentNodeID = controller_common.GenerateUUID(parentProfileLocationStrs)
+			profileValue := 0
+			if profileValueInt, ok := valueSlice[profileValueIndex].(int); ok {
+				profileValue = profileValueInt
+			}
+			dst := make([]byte, 0, len(profileLocationStr))
+			profileLocationStrByte, _ := ingester_common.ZstdDecompress(dst, []byte(profileLocationStr))
+			profileLocationStrSlice := strings.Split(string(profileLocationStrByte), ";")
+			for profileLocationIndex := range profileLocationStrSlice {
+				nodeProfileValue := 0
+				if profileLocationIndex == len(profileLocationStrSlice)-1 {
+					nodeProfileValue = profileValue
+					rootTotalValue += profileValue
 				}
-				NodeIDToProfileTree[nodeID] = node
+				profileLocationStrs := strings.Join(profileLocationStrSlice[:profileLocationIndex+1], ";")
+				nodeID := controller_common.GenerateUUID(profileLocationStrs)
+				existNode, ok := NodeIDToProfileTree[nodeID]
+				if ok {
+					existNode.SelfValue += nodeProfileValue
+					existNode.TotalValue = existNode.SelfValue
+				} else {
+					nodeProfileLocationStr := profileLocationStrSlice[profileLocationIndex]
+					node := NewProfileTreeNode(nodeProfileLocationStr, nodeID, nodeProfileValue)
+					if profileLocationIndex != 0 {
+						parentProfileLocationStrs := strings.Join(profileLocationStrSlice[:profileLocationIndex], ";")
+						node.ParentNodeID = controller_common.GenerateUUID(parentProfileLocationStrs)
+					}
+					NodeIDToProfileTree[nodeID] = node
+				}
 			}
 		}
 	}
 
-	rootTotalValue := 0
+	if len(NodeIDToProfileTree) == 0 {
+		return
+	}
+
 	// update total_value
 	for _, node := range NodeIDToProfileTree {
 		if node.SelfValue == 0 {
 			continue
 		}
-		rootTotalValue += node.SelfValue
 		parentNode, ok := NodeIDToProfileTree[node.ParentNodeID]
 		if ok {
 			UpdateNodeTotalValue(node, parentNode, NodeIDToProfileTree)
 		}
+
 	}
 	// format root node
-	rootNode := NewProfileTreeNode("", "", 0)
+	rootNode := NewProfileTreeNode("root", "", 0)
 	rootNode.ParentNodeID = "-1"
 	rootNode.TotalValue = rootTotalValue
 
@@ -152,9 +169,9 @@ func Tracing(args model.ProfileTracing, cfg *config.QuerierConfig) (result []*mo
 	return
 }
 
-func NewProfileTreeNode(profileLocationStrs string, nodeID string, profileValue int) *model.ProfileTreeNode {
+func NewProfileTreeNode(profileLocationStr string, nodeID string, profileValue int) *model.ProfileTreeNode {
 	node := &model.ProfileTreeNode{}
-	node.ProfileLocationStrs = profileLocationStrs
+	node.ProfileLocationStr = profileLocationStr
 	node.NodeID = nodeID
 	node.SelfValue = profileValue
 	node.TotalValue = profileValue
@@ -168,6 +185,6 @@ func UpdateNodeTotalValue(node *model.ProfileTreeNode, parentNode *model.Profile
 	}
 	newParentNode, ok := NodeIDToProfileTree[parentNode.ParentNodeID]
 	if ok {
-		UpdateNodeTotalValue(parentNode, newParentNode, NodeIDToProfileTree)
+		UpdateNodeTotalValue(node, newParentNode, NodeIDToProfileTree)
 	}
 }

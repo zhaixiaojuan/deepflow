@@ -38,6 +38,7 @@ func profileTracing(cfg *config.QuerierConfig) gin.HandlerFunc {
 
 		// 参数校验
 		err := c.ShouldBindBodyWith(&profileTracing, binding.JSON)
+		profileTracing.Context = c.Request.Context()
 		if err != nil {
 			router.BadRequestResponse(c, common.INVALID_POST_DATA, err.Error())
 			return
