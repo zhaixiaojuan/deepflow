@@ -71,7 +71,7 @@ func (e *CHEngine) ExecuteQuery(args *common.QuerierParams) (*common.Result, map
 	e.Context = args.Context
 	e.NoPreWhere = args.NoPreWhere
 	query_uuid := args.QueryUUID // FIXME: should be queryUUID
-	log.Debugf("query_uuid: %s | raw sql: %s", query_uuid, sql)
+	log.Infof("query_uuid: %s | raw sql: %s", query_uuid, sql)
 	// Parse slimitSql
 	slimitResult, slimitDebug, err := e.ParseSlimitSql(sql, args)
 	if err != nil {

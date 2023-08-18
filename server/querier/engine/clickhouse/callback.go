@@ -47,6 +47,7 @@ func (c *Callback) Format(m *view.Model) {
 
 func TimeFill(args []interface{}) func(result *common.Result) error { // group by time时的补点
 	return func(result *common.Result) error {
+		log.Info(len(result.Values))
 		if result.Values == nil || len(result.Values) == 0 {
 			return nil
 		}
