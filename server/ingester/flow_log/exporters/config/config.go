@@ -18,8 +18,8 @@ type ExportersCfg struct {
 	ExportCustomK8sLabelsRegexp string   `yaml:"export-custom-k8s-labels-regexp"`
 	ExportOnlyWithTraceID       bool     `yaml:"export-only-with-traceid"`
 
-	// OtlpExporter config for OTLP exporter
-	OtlpExporterCfg OtlpExporterConfig `yaml:"otlp-exporter"`
+	// OtlpExporter configs for OTLP exporters
+	OtlpExporterCfgs []OtlpExporterConfig `yaml:"otlp-exporters"`
 
 	// other exporter config ...
 }
@@ -41,8 +41,10 @@ func (ec *ExportersCfg) calcDataBits() {
 
 func (ec *ExportersCfg) Validate() error {
 	ec.calcDataBits()
-	if err := ec.OtlpExporterCfg.Validate(); err != nil {
-		return err
+	for i := range ec.OtlpExporterCfgs {
+		if err := ec.OtlpExporterCfgs[i].Validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -52,10 +54,10 @@ var DefaultOtlpExportDataTypes = []string{"service_info", "tracing_info", "netwo
 
 func NewDefaultExportersCfg() ExportersCfg {
 	return ExportersCfg{
-		Enabled:         false,
-		ExportDatas:     DefaultOtlpExportDatas,
-		ExportDataTypes: DefaultOtlpExportDataTypes,
-		OtlpExporterCfg: NewOtlpDefaultConfig(),
+		Enabled:          false,
+		ExportDatas:      DefaultOtlpExportDatas,
+		ExportDataTypes:  DefaultOtlpExportDataTypes,
+		OtlpExporterCfgs: []OtlpExporterConfig{NewOtlpDefaultConfig()},
 	}
 }
 

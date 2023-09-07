@@ -18,6 +18,7 @@ package otlp_exporter
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	logging "github.com/op/go-logging"
@@ -82,11 +83,11 @@ type ExportItem interface {
 	Release()
 }
 
-func NewOtlpExporter(config *exporters_cfg.ExportersCfg, universalTagsManager *utag.UniversalTagsManager) *OtlpExporter {
-	otlpConfig := config.OtlpExporterCfg
+func NewOtlpExporter(index int, config *exporters_cfg.ExportersCfg, universalTagsManager *utag.UniversalTagsManager) *OtlpExporter {
+	otlpConfig := config.OtlpExporterCfgs[index]
 
 	dataQueues := queue.NewOverwriteQueues(
-		"otlp_exporter", queue.HashKey(otlpConfig.QueueCount), otlpConfig.QueueSize,
+		"otlp_exporter_"+strconv.Itoa(index), queue.HashKey(otlpConfig.QueueCount), otlpConfig.QueueSize,
 		queue.OptionFlushIndicator(time.Second),
 		queue.OptionRelease(func(p interface{}) { p.(ExportItem).Release() }),
 		common.QUEUE_STATS_MODULE_INGESTER)
@@ -103,8 +104,8 @@ func NewOtlpExporter(config *exporters_cfg.ExportersCfg, universalTagsManager *u
 	}
 	debug.ServerRegisterSimple(ingesterctl.CMD_OTLP_EXPORTER, exporter)
 	common.RegisterCountableForIngester("exporter", exporter, stats.OptionStatTags{
-		"type": "otlp"})
-	log.Info("otlp exporter created")
+		"type": "otlp", "index": strconv.Itoa(index)})
+	log.Infof("otlp exporter %d created", index)
 	return exporter
 }
 
