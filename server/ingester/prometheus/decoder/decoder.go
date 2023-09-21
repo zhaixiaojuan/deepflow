@@ -357,17 +357,20 @@ func (b *PrometheusSamplesBuilder) TimeSeriesToStore(vtapID, podClusterId uint16
 		nameID, ok := b.labelTable.QueryLabelNameID(l.Name)
 		if !ok {
 			b.counter.NameMiss++
+			log.Warningf("lizf name %s not exist %s", l.Name, ts)
 			return true, nil
 		}
 		valueID, ok := b.labelTable.QueryLabelValueID(l.Value)
 		if !ok {
 			b.counter.ValueMiss++
+			log.Warningf("lizf name %s not exist %s", l.Value, ts)
 			return true, nil
 		}
 
 		// the Controller needs to get all the Value lists contained in the Name for filtering when querying
 		if !b.labelTable.QueryLabelNameValue(nameID, valueID) {
 			b.counter.NameValueMiss++
+			log.Warningf("lizf nameid  valueid %d %d not exist %s", nameID, valueID, ts)
 			return true, nil
 		}
 
@@ -386,6 +389,7 @@ func (b *PrometheusSamplesBuilder) TimeSeriesToStore(vtapID, podClusterId uint16
 			columnIndex, ok = b.labelTable.QueryColumnIndex(metricID, nameID)
 			if !ok {
 				b.counter.ColumnMiss++
+				log.Warningf("lizf metricid %d nameid %d not exist %s", metricID, nameID, ts)
 				return true, nil
 			}
 		}
@@ -400,11 +404,13 @@ func (b *PrometheusSamplesBuilder) TimeSeriesToStore(vtapID, podClusterId uint16
 
 	if metricName == "" {
 		b.counter.TimeSeriesInvaild++
+		log.Warningf("lizf metric %s not exist %s", metricName, ts)
 		return false, fmt.Errorf("prometheum metric name(%s) is empty", metricName)
 	}
 
 	if jobID == 0 {
 		if jobID, ok = b.labelTable.QueryLabelValueID(""); !ok {
+			log.Warningf("lizf name %s not exist %s", l.Value, ts)
 			b.counter.ValueMiss++
 			return true, nil
 		}
@@ -412,11 +418,13 @@ func (b *PrometheusSamplesBuilder) TimeSeriesToStore(vtapID, podClusterId uint16
 	if instanceID == 0 {
 		if instanceID, ok = b.labelTable.QueryLabelValueID(""); !ok {
 			b.counter.ValueMiss++
+			log.Warningf("lizf name %s not exist %s", l.Value, ts)
 			return true, nil
 		}
 	}
 	targetID, ok := b.labelTable.QueryTargetID(podClusterId, jobID, instanceID)
 	if !ok {
+		log.Warningf("lizf target(%d %d %d)  not exist %s", podClusterId, jobID, instanceID, ts)
 		b.counter.TargetMiss++
 		return true, nil
 	}
