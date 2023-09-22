@@ -534,42 +534,45 @@ func (t *PrometheusLabelTable) HandleSimpleCommand(op uint16, arg string) string
 }
 
 // request string as: metric=xxx,job=xxx,instance=xxx,label1=xxx,label2=xxx
-func (t *PrometheusLabelTable) testString(request string) string {
+func (t *PrometheusLabelTable) testString(requests string) string {
 	req := &trident.PrometheusLabelRequest{}
-	metricReq := &trident.MetricLabelRequest{}
-	targetReq := &trident.TargetRequest{}
-	keyValues := strings.Split(request, ",")
-	clusterId := 0
-	for _, kv := range keyValues {
-		kv := strings.Split(kv, "=")
-		if len(kv) != 2 {
-			continue
+	reqs := strings.Split(requests, ";")
+	for _, request := range reqs {
+		metricReq := &trident.MetricLabelRequest{}
+		targetReq := &trident.TargetRequest{}
+		keyValues := strings.Split(request, ",")
+		clusterId := 0
+		for _, kv := range keyValues {
+			kv := strings.Split(kv, "=")
+			if len(kv) != 2 {
+				continue
+			}
+			if kv[0] == "metric" {
+				metricReq.MetricName = &(kv[1])
+			} else if kv[0] == "job" {
+				job := kv[1]
+				targetReq.Job = &job
+				addLabel(metricReq, kv[0], kv[1])
+			} else if kv[0] == "instance" {
+				instance := kv[1]
+				targetReq.Instance = &instance
+				addLabel(metricReq, kv[0], kv[1])
+			} else if kv[0] == "clusterId" {
+				clusterId, _ = strconv.Atoi(kv[1])
+			} else {
+				addLabel(metricReq, kv[0], kv[1])
+			}
 		}
-		if kv[0] == "metric" {
-			metricReq.MetricName = &(kv[1])
-		} else if kv[0] == "job" {
-			job := kv[1]
-			targetReq.Job = &job
-			addLabel(metricReq, kv[0], kv[1])
-		} else if kv[0] == "instance" {
-			instance := kv[1]
-			targetReq.Instance = &instance
-			addLabel(metricReq, kv[0], kv[1])
-		} else if kv[0] == "clusterId" {
-			clusterId, _ = strconv.Atoi(kv[1])
-		} else {
-			addLabel(metricReq, kv[0], kv[1])
-		}
+		metricReq.PodClusterId = proto.Uint32(uint32(clusterId))
+		targetReq.PodClusterId = proto.Uint32(uint32(clusterId))
+		req.RequestLabels = append(req.RequestLabels, metricReq)
+		req.RequestTargets = append(req.RequestTargets, targetReq)
 	}
-	metricReq.PodClusterId = proto.Uint32(uint32(clusterId))
-	targetReq.PodClusterId = proto.Uint32(uint32(clusterId))
-	req.RequestLabels = append(req.RequestLabels, metricReq)
-	req.RequestTargets = append(req.RequestTargets, targetReq)
 	resp, err := t.RequestLabelIDs(req)
 	if err != nil {
 		return fmt.Sprintf("request: %s\nresponse failed: %s", req, err)
 	}
-	return fmt.Sprintf("request: %s\nresponse: %s", req, resp)
+	return fmt.Sprintf("request labels(%d): %s\nresponse labels(%d): %s", len(req.GetRequestLabels()), req, len(resp.GetResponseLabelIds()), resp)
 }
 
 // explain string as: xxx|xxx|xxxx|xxxx|...,   means: metric_id|target_id|app_label_value_id_1|app_label_value_id_2|...
