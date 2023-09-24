@@ -125,6 +125,8 @@ type PrometheusLabelTable struct {
 
 	counter *RequestCounter
 	utils.Closable
+	debug    bool
+	notarget bool
 }
 
 func NewPrometheusLabelTable(controllerIPs []string, port, rpcMaxMsgSize int) *PrometheusLabelTable {
@@ -206,6 +208,10 @@ func (t *PrometheusLabelTable) RequestLabelIDs(request *trident.PrometheusLabelR
 	if err != nil {
 		t.counter.ResponseFailed++
 		return nil, err
+	}
+
+	if t.debug {
+		log.Infof("prometheus debug request(%d): %s\nresponse(%d): %s", len(request.GetRequestLabels()), request, len(response.GetResponseLabelIds()), response)
 	}
 
 	t.counter.ResponseLabelsCount += int64(len(response.GetResponseLabelIds()))
@@ -535,6 +541,19 @@ func (t *PrometheusLabelTable) HandleSimpleCommand(op uint16, arg string) string
 
 // request string as: metric=xxx,job=xxx,instance=xxx,label1=xxx,label2=xxx
 func (t *PrometheusLabelTable) testString(request string) string {
+	if request == "debug" {
+		t.debug = true
+		return fmt.Sprintf("open request debug")
+	} else {
+		t.debug = false
+	}
+	if request == "notarget" {
+		t.notarget = true
+		return fmt.Sprintf("set no target request")
+	} else if request == "target" {
+		t.notarget = false
+		return fmt.Sprintf("set target request")
+	}
 	req := &trident.PrometheusLabelRequest{}
 	metricReq := &trident.MetricLabelRequest{}
 	targetReq := &trident.TargetRequest{}
@@ -564,7 +583,9 @@ func (t *PrometheusLabelTable) testString(request string) string {
 	metricReq.PodClusterId = proto.Uint32(uint32(clusterId))
 	targetReq.PodClusterId = proto.Uint32(uint32(clusterId))
 	req.RequestLabels = append(req.RequestLabels, metricReq)
-	req.RequestTargets = append(req.RequestTargets, targetReq)
+	if !t.notarget {
+		req.RequestTargets = append(req.RequestTargets, targetReq)
+	}
 	resp, err := t.RequestLabelIDs(req)
 	if err != nil {
 		return fmt.Sprintf("request: %s\nresponse failed: %s", req, err)
