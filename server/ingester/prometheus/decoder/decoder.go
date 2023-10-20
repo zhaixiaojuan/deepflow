@@ -495,12 +495,22 @@ func (b *PrometheusSamplesBuilder) fillUniversalTag(m *dbwriter.PrometheusSample
 		if podNameID != 0 {
 			if universalTag, ok := b.podNameIDToUniversalTag[podNameID]; ok {
 				m.UniversalTag = universalTag
+				if instance == "10.50.100.91:9100" || instance == "10.50.100.91:9100" {
+					log.Infof("lizf1 podName=%s id=%d instance=%s  universalTag=%+v", podName, podNameID, instance, m.UniversalTag)
+				}
 				return
+			} else {
+				log.Debugf("lizf podname invalid %d %s", podNameID, podName)
 			}
 		} else if instanceID != 0 {
 			if universalTag, ok := b.instanceIPToUniversalTag[instanceID]; ok {
 				m.UniversalTag = universalTag
+				if instance == "10.50.100.91:9100" || instance == "10.50.100.91:9100" {
+					log.Infof("lizf1 podName=%s instance=%s id=%d  universalTag=%+v", podName, instance, instanceID, m.UniversalTag)
+				}
 				return
+			} else {
+				log.Debugf("lizf instance invalid instance %d %s", instanceID, instance)
 			}
 		} else if fillWithVtapId {
 			if universalTag, ok := b.vtapIDToUniversalTag[vtapID]; ok {
@@ -521,6 +531,9 @@ func (b *PrometheusSamplesBuilder) fillUniversalTag(m *dbwriter.PrometheusSample
 	} else if fillWithVtapId {
 		b.vtapIDToUniversalTag[vtapID] = m.UniversalTag
 	}
+	if instance == "10.50.100.91:9100" || instance == "10.50.100.91:9100" {
+		log.Infof("lizf podName=%s %d instance=%s %d  universalTag=%+v", podName, podNameID, instance, instanceID, m.UniversalTag)
+	}
 }
 
 func (b *PrometheusSamplesBuilder) fillUniversalTagSlow(m *dbwriter.PrometheusSample, vtapID uint16, podName, instance string, fillWithVtapId bool) {
@@ -537,6 +550,11 @@ func (b *PrometheusSamplesBuilder) fillUniversalTagSlow(m *dbwriter.PrometheusSa
 			t.L3EpcID = podInfo.EpcId
 			ip = net.ParseIP(podInfo.Ip)
 			hasMatched = true
+			if t.L3EpcID == -2 || t.PodID == 0 {
+				log.Debugf("lizf podInfo invalid %+v", podInfo)
+			}
+		} else {
+			log.Debugf("lizf podInfo invalid podName=%s ", podName)
 		}
 	}
 
@@ -547,6 +565,8 @@ func (b *PrometheusSamplesBuilder) fillUniversalTagSlow(m *dbwriter.PrometheusSa
 			if ip != nil {
 				hasMatched = true
 			}
+		} else {
+			log.Debugf("lizf instanceInfo invalid instance=%s ", instance)
 		}
 	}
 
