@@ -20,11 +20,13 @@ import (
 	"bytes"
 	"errors"
 	"log/syslog"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
+	"github.com/deepflowio/deepflow/server/libs/codec"
 	logging "github.com/op/go-logging"
 
 	"github.com/deepflowio/deepflow/server/libs/queue"
@@ -62,20 +64,17 @@ type syslogWriter struct {
 	esLogger *ESLogger
 }
 
-func (w *syslogWriter) create(packet *receiver.RecvBuffer) *fileWriter {
-	fileName := filepath.Join(w.directory, packet.IP.String()+".log")
+func (w *syslogWriter) create(ip net.IP) *fileWriter {
+	fileName := filepath.Join(w.directory, ip.String()+".log")
 	return &fileWriter{NewRotateWriter(fileName), _FILE_FEED}
 }
 
-func (w *syslogWriter) write(writer *fileWriter, packet *receiver.RecvBuffer) {
-	if packet.End > packet.Begin {
-		buffer := bytes.NewBuffer(packet.Buffer[packet.Begin:packet.End])
-		writer.fileBuffer.Write(buffer.Bytes())
-		writer.feed = _FILE_FEED
-	}
+func (w *syslogWriter) write(writer *fileWriter, packet []byte) {
+	writer.fileBuffer.Write(packet)
+	writer.feed = _FILE_FEED
 }
 
-func (w *syslogWriter) writeFile(packet *receiver.RecvBuffer) {
+func (w *syslogWriter) writeFile(ip net.IP, packet []byte) {
 	if !w.logToFileEnabled {
 		return
 	}
@@ -91,15 +90,16 @@ func (w *syslogWriter) writeFile(packet *receiver.RecvBuffer) {
 		}
 		return
 	}
-	hash := utils.GetIpHash(packet.IP)
+	hash := utils.GetIpHash(ip)
 	if _, in := w.fileMap[hash]; !in {
-		w.fileMap[hash] = w.create(packet)
+		w.fileMap[hash] = w.create(ip)
 	}
 	w.write(w.fileMap[hash], packet)
 }
 
-func (w *syslogWriter) writeES(packet *receiver.RecvBuffer) {
+func (w *syslogWriter) writeES(packet []byte) {
 	if w.esLogger == nil {
+		log.Warning("lizf err 0")
 		return
 	}
 	if packet == nil {
@@ -107,12 +107,11 @@ func (w *syslogWriter) writeES(packet *receiver.RecvBuffer) {
 		w.esLogger.Flush()
 		return
 	}
-	if packet.End <= packet.Begin {
-		return
-	}
-	if esLog, err := parseSyslog(packet.Buffer[packet.Begin:packet.End]); err == nil {
+	if esLog, err := parseSyslog(packet); err == nil {
+		log.Infof("lizf write success %s", string(packet))
 		w.esLogger.Log(esLog)
-	} else if log.IsEnabledFor(logging.DEBUG) {
+	} else {
+		log.Warningf("lizf invalid log message for es: data: %s  err: %s", string(packet), err)
 		log.Debug("invalid log message for es:", err)
 	}
 }
@@ -173,17 +172,30 @@ func NewSyslogWriter(in queue.QueueReader, logToFileEnabled, esEnabled bool, dir
 
 func (w *syslogWriter) run() {
 	packets := make([]interface{}, QUEUE_BATCH_SIZE)
+	decoder := &codec.SimpleDecoder{}
 
 	for {
 		n := w.in.Gets(packets)
 		for i := 0; i < n; i++ {
 			value := packets[i]
 			if packet, ok := value.(*receiver.RecvBuffer); ok {
-				w.writeFile(packet)
-				w.writeES(packet)
+				if packet.SocketType == receiver.UDP {
+					w.writeFile(packet.IP, packet.Buffer[packet.Begin:packet.End])
+					w.writeES(packet.Buffer[packet.Begin:packet.End])
+				} else {
+					decoder.Init(packet.Buffer[packet.Begin:packet.End])
+					for !decoder.IsEnd() {
+						bytes := decoder.ReadBytes()
+						if bytes != nil {
+							w.writeFile(packet.IP, bytes)
+							w.writeES(bytes)
+
+						}
+					}
+				}
 				receiver.ReleaseRecvBuffer(packet)
 			} else if value == nil { // flush ticker
-				w.writeFile(nil)
+				w.writeFile(nil, nil)
 				w.writeES(nil)
 			} else {
 				log.Warning("get queue data type wrong")
