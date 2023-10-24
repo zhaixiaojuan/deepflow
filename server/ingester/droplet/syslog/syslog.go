@@ -100,6 +100,7 @@ func (w *syslogWriter) writeFile(packet *receiver.RecvBuffer) {
 
 func (w *syslogWriter) writeES(packet *receiver.RecvBuffer) {
 	if w.esLogger == nil {
+		log.Warning("lizf err 0")
 		return
 	}
 	if packet == nil {
@@ -108,11 +109,14 @@ func (w *syslogWriter) writeES(packet *receiver.RecvBuffer) {
 		return
 	}
 	if packet.End <= packet.Begin {
+		log.Warning("lizf err")
 		return
 	}
 	if esLog, err := parseSyslog(packet.Buffer[packet.Begin:packet.End]); err == nil {
+		log.Infof("lizf write success %s", string(packet.Buffer[packet.Begin:packet.End]))
 		w.esLogger.Log(esLog)
-	} else if log.IsEnabledFor(logging.DEBUG) {
+	} else {
+		log.Warningf("lizf invalid log message for es: data: %s  err: %s", string(packet.Buffer[packet.Begin:packet.End]), err)
 		log.Debug("invalid log message for es:", err)
 	}
 }

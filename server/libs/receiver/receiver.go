@@ -913,6 +913,9 @@ func (r *Receiver) handleTCPConnection(conn net.Conn) {
 			recvBuffer.IP = ip
 			recvBuffer.VtapID = vtapID
 			r.putTCPQueue(int(r.counter.RxPackets), r.handlers[baseHeader.Type], recvBuffer)
+			if baseHeader.Type == datatype.MESSAGE_TYPE_SYSLOG {
+				log.Infof("lizf recv syslog %s", string(recvBuffer.Buffer[:recvBuffer.End]))
+			}
 		}
 	}
 }
