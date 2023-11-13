@@ -281,7 +281,7 @@ impl FlowAggr {
         }
 
         if f.flow.close_type == CloseType::ForcedReport {
-            f.flow.end_time = f.flow.start_time + Duration::from_secs(SECONDS_IN_MINUTE);
+            f.flow.end_time = Timestamp::from_secs(f.flow.start_time.as_secs() + SECONDS_IN_MINUTE);
         }
         self.metrics.out.fetch_add(1, Ordering::Relaxed);
         if f.flow.hit_pcap_policy() {
