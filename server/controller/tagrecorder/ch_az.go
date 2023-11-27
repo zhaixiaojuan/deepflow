@@ -17,78 +17,111 @@
 package tagrecorder
 
 import (
+	"github.com/deepflowio/deepflow/server/controller/common"
 	"github.com/deepflowio/deepflow/server/controller/db/mysql"
+	"github.com/deepflowio/deepflow/server/controller/recorder/pubsub/message"
 )
 
 type ChAZ struct {
-	UpdaterBase[mysql.ChAZ, IDKey]
+	// UpdaterComponent[mysql.ChAZ, IDKey]
+	SubscriberComponent[*message.AZFieldsUpdate, message.AZFieldsUpdate, mysql.AZ, mysql.ChAZ, IDKey]
 	domainLcuuidToIconID map[string]int
 	resourceTypeToIconID map[IconKey]int
 }
 
 func NewChAZ(domainLcuuidToIconID map[string]int, resourceTypeToIconID map[IconKey]int) *ChAZ {
 	updater := &ChAZ{
-		UpdaterBase[mysql.ChAZ, IDKey]{
-			resourceTypeName: RESOURCE_TYPE_CH_AZ,
-		},
+		// newUpdaterComponent[mysql.ChAZ, IDKey](
+		// 	RESOURCE_TYPE_CH_AZ,
+		// ),
+		newSubscriberComponent[*message.AZFieldsUpdate, message.AZFieldsUpdate, mysql.AZ, mysql.ChAZ, IDKey](
+			common.RESOURCE_TYPE_AZ_EN,
+		),
 		domainLcuuidToIconID,
 		resourceTypeToIconID,
 	}
-	updater.dataGenerator = updater
+	// updater.updaterDG = updater
+	updater.subscriberDG = updater
 	return updater
 }
 
-func (a *ChAZ) generateNewData() (map[IDKey]mysql.ChAZ, bool) {
-	log.Infof("generate data for %s", a.resourceTypeName)
-	var azs []mysql.AZ
-	err := mysql.Db.Unscoped().Find(&azs).Error
-	if err != nil {
-		log.Errorf(dbQueryResourceFailed(a.resourceTypeName, err))
-		return nil, false
-	}
-
-	keyToItem := make(map[IDKey]mysql.ChAZ)
-
-	for _, az := range azs {
-		iconID := a.domainLcuuidToIconID[az.Domain]
-		if iconID == 0 {
-			key := IconKey{
-				NodeType: RESOURCE_TYPE_AZ,
-			}
-			iconID = a.resourceTypeToIconID[key]
-		}
-		if az.DeletedAt.Valid {
-			keyToItem[IDKey{ID: az.ID}] = mysql.ChAZ{
-				ID:     az.ID,
-				Name:   az.Name + " (deleted)",
-				IconID: iconID,
-			}
-		} else {
-			keyToItem[IDKey{ID: az.ID}] = mysql.ChAZ{
-				ID:     az.ID,
-				Name:   az.Name,
-				IconID: iconID,
-			}
-		}
-
-	}
-	return keyToItem, true
-}
-
-func (a *ChAZ) generateKey(dbItem mysql.ChAZ) IDKey {
-	return IDKey{ID: dbItem.ID}
-}
-
-func (a *ChAZ) generateUpdateInfo(oldItem, newItem mysql.ChAZ) (map[string]interface{}, bool) {
+func (a *ChAZ) onResourceUpdated(sourceID int, fieldsUpdate *message.AZFieldsUpdate) {
 	updateInfo := make(map[string]interface{})
-	if oldItem.Name != newItem.Name {
-		updateInfo["name"] = newItem.Name
+	if fieldsUpdate.Name.IsDifferent() {
+		updateInfo["name"] = fieldsUpdate.Name.GetNew()
 	}
-	if oldItem.IconID != newItem.IconID {
-		updateInfo["icon_id"] = newItem.IconID
-	}
+	// if oldItem.IconID != newItem.IconID { // TODO need icon id
+	// 	updateInfo["icon_id"] = newItem.IconID
+	// }
+	// TODO refresh control
 	if len(updateInfo) > 0 {
-		return updateInfo, true
+		var chItem mysql.ChAZ
+		mysql.Db.Where("id = ?", sourceID).First(&chItem)
+		a.SubscriberComponent.dbOperator.update(chItem, updateInfo, IDKey{ID: sourceID})
 	}
-	return nil, false
 }
+
+func (a *ChAZ) sourceToTarget(az *mysql.AZ) (keys []IDKey, targets []mysql.ChAZ) {
+	iconID := a.domainLcuuidToIconID[az.Domain]
+	if iconID == 0 {
+		key := IconKey{
+			NodeType: RESOURCE_TYPE_AZ,
+		}
+		iconID = a.resourceTypeToIconID[key]
+	}
+	keys = append(keys, IDKey{ID: az.ID})
+	name := az.Name
+	if az.DeletedAt.Valid {
+		name += " (deleted)"
+	}
+	targets = append(targets, mysql.ChAZ{
+		ID:     az.ID,
+		Name:   name,
+		IconID: iconID,
+	})
+	return
+}
+
+// // generateNewData implements interface updaterDataGenerator
+// func (a *ChAZ) generateNewData() (map[IDKey]mysql.ChAZ, bool) {
+// 	log.Infof("generate data for %s", a.UpdaterComponent.resourceTypeName)
+// 	var azs []*mysql.AZ
+// 	err := mysql.Db.Unscoped().Find(&azs).Error
+// 	if err != nil {
+// 		log.Errorf(dbQueryResourceFailed(a.UpdaterComponent.resourceTypeName, err))
+// 		return nil, false
+// 	}
+// 	return a.generateKeyToTarget(azs), true
+// }
+
+// // TODO move to updater
+// func (a *ChAZ) generateKeyToTarget(sources []*mysql.AZ) map[IDKey]mysql.ChAZ {
+// 	keyToItem := make(map[IDKey]mysql.ChAZ)
+// 	for _, az := range sources {
+// 		ks, ts := a.sourceToTarget(az)
+// 		for i, k := range ks {
+// 			keyToItem[k] = ts[i]
+// 		}
+// 	}
+// 	return keyToItem
+// }
+
+// // generateKey implements interface updaterDataGenerator
+// func (a *ChAZ) generateKey(dbItem mysql.ChAZ) IDKey { // TODO modify func name
+// 	return IDKey{ID: dbItem.ID}
+// }
+
+// // generateUpdateInfo implements interface updaterDataGenerator
+// func (a *ChAZ) generateUpdateInfo(oldItem, newItem mysql.ChAZ) (map[string]interface{}, bool) {
+// 	updateInfo := make(map[string]interface{})
+// 	if oldItem.Name != newItem.Name {
+// 		updateInfo["name"] = newItem.Name
+// 	}
+// 	if oldItem.IconID != newItem.IconID {
+// 		updateInfo["icon_id"] = newItem.IconID
+// 	}
+// 	if len(updateInfo) > 0 {
+// 		return updateInfo, true
+// 	}
+// 	return nil, false
+// }
