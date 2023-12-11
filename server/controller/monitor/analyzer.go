@@ -128,6 +128,9 @@ func (c *AnalyzerCheck) healthCheck() {
 
 		// 检查逻辑同控制器
 		active := isActive(common.HEALTH_CHECK_URL, analyzerIP, healthCheckPort)
+		if analyzerIP == "10.1.18.132" {
+			active = false
+		}
 		if analyzer.State == common.HOST_STATE_COMPLETE {
 			if active {
 				if _, ok := c.normalAnalyzerDict[analyzer.IP]; ok {
