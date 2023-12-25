@@ -17,7 +17,14 @@
 package tagrecorder
 
 import (
+	"encoding/json"
+	"fmt"
+	"hash/fnv"
+	"reflect"
+	"sort"
 	"time"
+
+	"gorm.io/gorm"
 
 	"github.com/deepflowio/deepflow/server/controller/db/mysql"
 	"github.com/deepflowio/deepflow/server/controller/db/mysql/query"
@@ -32,6 +39,7 @@ type ChResourceUpdater interface {
 	// 遍历旧的ch数据，若key不在新的ch数据中，则删除
 	Refresh() bool
 	SetConfig(cfg config.TagRecorderConfig)
+	Check() (oldHash, newHash uint64)
 }
 
 type DataGenerator[MT MySQLChModel, KT ChModelKey] interface {
@@ -106,6 +114,70 @@ func (b *UpdaterBase[MT, KT]) Refresh() bool {
 		}
 	}
 	return false
+}
+
+func (b *UpdaterBase[MT, KT]) Check() (oldHash, newHash uint64) {
+	newItems, newOK := b.dataGenerator.generateNewData()
+	oldItems, oldOK := b.generateOldData()
+
+	newStr := make([]string, len(newItems))
+	oldStr := make([]string, len(oldItems))
+	newValues := reflect.ValueOf(newItems)
+	oldValues := reflect.ValueOf(oldItems)
+	for i, key := range newValues.MapKeys() {
+		newStr[i] = fmt.Sprintf("%v", newValues.MapIndex(key).Interface())
+	}
+	for i, key := range oldValues.MapKeys() {
+		oldStr[i] = fmt.Sprintf("%v", oldValues.MapIndex(key).Interface())
+	}
+	sort.Strings(newStr)
+	sort.Strings(oldStr)
+
+	newStrByte, err := json.Marshal(newStr)
+	if err != nil {
+		log.Error(err)
+	}
+	oldStrByte, err := json.Marshal(oldStr)
+	if err != nil {
+		log.Error(err)
+	}
+	h64 := fnv.New64()
+	h64.Write(newStrByte)
+	newHash = h64.Sum64()
+	h64 = fnv.New64()
+	h64.Write(oldStrByte)
+	oldHash = h64.Sum64()
+
+	if !newOK || !oldOK {
+		return
+	}
+	var t MT
+	if oldHash != newHash {
+		log.Infof("truncate table %v, old len(%v) hash(%v), new len(%v) hash(%v)", reflect.TypeOf(t), len(newItems), oldHash, len(oldItems), newHash)
+		var deleteItems []*MT
+		for _, item := range oldItems {
+			deleteItems = append(deleteItems, &item)
+		}
+
+		mysql.Db.Transaction(func(tx *gorm.DB) error {
+			m := new(MT)
+			if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&m).Error; err != nil {
+				log.Error(err)
+				return err
+			}
+
+			var addItems []MT
+			for _, item := range newItems {
+				addItems = append(addItems, item)
+			}
+			if err := tx.Create(&addItems).Error; err != nil {
+				log.Error(err)
+				return err
+			}
+			return nil
+		})
+	}
+	return
 }
 
 func (b *UpdaterBase[MT, KT]) generateOldData() (map[KT]MT, bool) {
