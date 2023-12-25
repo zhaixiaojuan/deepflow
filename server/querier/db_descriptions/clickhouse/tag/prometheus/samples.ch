@@ -35,7 +35,7 @@ auto_service_type          , 类型-服务优先              , `auto_service`�
 auto_service               , 资源-服务优先              , 在`auto_instance`基础上，将容器服务的 ClusterIP 与工作负载聚合为服务，实例为IP时，auto_service_id显示为子网ID。
 
 k8s.label                  , K8s Label                  ,
-cloud.tag                  , Cloud Tag                  ,
+cloud.tag                  , Cloud Tag                          ,
 os.app                     , OS APP                     ,
 
 ip                         , IP 地址                    ,

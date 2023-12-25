@@ -2,7 +2,7 @@
 time_str                   , time_str                  , time_str                  , time           ,                       , Timestamp       , 111
 time                       , time                      , time                      , time           ,                       , Flow Info       , 111
 
-region                     , region                    , region                    , resource       ,                       , Universal Tag   , 110
+region                     , region                    , region                    , resource       ,                       , Universal Tag           , 110
 
 user                       , user                      , user                      , string         ,                       , Alarm Info      , 111
 policy_id                  , policy_id                 , policy_id                 , int            ,                       , Alarm Info      , 111

@@ -2,32 +2,32 @@
 _id                        , _id                       , _id                       , id            ,                       , Flow Info       , 111
 time                       , time                      , time                      , time          ,                       , Timestamp       , 111
 
-region                     , region                    , region                    , resource      ,                       , Universal Tag   , 110
-az                         , az                        , az                        , resource      ,                       , Universal Tag   , 110
-host                       , host                      , host                      , resource      ,                       , Universal Tag   , 100
-chost                      , chost                     , chost                     , resource      ,                       , Universal Tag   , 111
-vpc                        , vpc                       , vpc                       , resource      ,                       , Universal Tag   , 111
-router                     , router                    , router                    , resource      ,                       , Universal Tag   , 110
-dhcpgw                     , dhcpgw                    , dhcpgw                    , resource      ,                       , Universal Tag   , 110
-lb                         , lb                        , lb                        , resource      ,                       , Universal Tag   , 110
-lb_listener                , lb_listener               , lb_listener               , resource      ,                       , Universal Tag   , 110
-natgw                      , natgw                     , natgw                     , resource      ,                       , Universal Tag   , 110
-redis                      , redis                     , redis                     , resource      ,                       , Universal Tag   , 110
-rds                        , rds                       , rds                       , resource      ,                       , Universal Tag   , 110
-pod_cluster                , pod_cluster               , pod_cluster               , resource      ,                       , Universal Tag   , 111
-pod_ns                     , pod_ns                    , pod_ns                    , resource      ,                       , Universal Tag   , 111
-pod_node                   , pod_node                  , pod_node                  , resource      ,                       , Universal Tag   , 111
-pod_ingress                , pod_ingress               , pod_ingress               , resource      ,                       , Universal Tag   , 111
-pod_service                , pod_service               , pod_service               , resource      ,                       , Universal Tag   , 111
-pod_group_type             , pod_group_type            , pod_group_type            , int_enum      , pod_group_type        , Universal Tag   , 111
-pod_group                  , pod_group                 , pod_group                 , resource      ,                       , Universal Tag   , 111
-pod                        , pod                       , pod                       , resource      ,                       , Universal Tag   , 111
-service                    , service                   , service                   , resource      ,                       , Universal Tag   , 111
+region                     , region                    , region                    , resource      ,                       , Universal Tag           , 110
+az                         , az                        , az                        , resource      ,                       , Universal Tag           , 110
+host                       , host                      , host                      , resource      ,                       , Universal Tag           , 100
+chost                      , chost                     , chost                     , resource      ,                       , Universal Tag           , 111
+vpc                        , vpc                       , vpc                       , resource      ,                       , Universal Tag           , 111
+router                     , router                    , router                    , resource      ,                       , Universal Tag           , 110
+dhcpgw                     , dhcpgw                    , dhcpgw                    , resource      ,                       , Universal Tag           , 110
+lb                         , lb                        , lb                        , resource      ,                       , Universal Tag           , 110
+lb_listener                , lb_listener               , lb_listener               , resource      ,                       , Universal Tag           , 110
+natgw                      , natgw                     , natgw                     , resource      ,                       , Universal Tag           , 110
+redis                      , redis                     , redis                     , resource      ,                       , Universal Tag           , 110
+rds                        , rds                       , rds                       , resource      ,                       , Universal Tag           , 110
+pod_cluster                , pod_cluster               , pod_cluster               , resource      ,                       , Universal Tag           , 111
+pod_ns                     , pod_ns                    , pod_ns                    , resource      ,                       , Universal Tag           , 111
+pod_node                   , pod_node                  , pod_node                  , resource      ,                       , Universal Tag           , 111
+pod_ingress                , pod_ingress               , pod_ingress               , resource      ,                       , Universal Tag           , 111
+pod_service                , pod_service               , pod_service               , resource      ,                       , Universal Tag           , 111
+pod_group_type             , pod_group_type            , pod_group_type            , int_enum      , pod_group_type        , Universal Tag           , 111
+pod_group                  , pod_group                 , pod_group                 , resource      ,                       , Universal Tag           , 111
+pod                        , pod                       , pod                       , resource      ,                       , Universal Tag           , 111
+service                    , service                   , service                   , resource      ,                       , Universal Tag           , 111
 
-k8s.label                  , k8s.label                 , k8s.label                 , map           ,                       , Custom Tag      , 111
-k8s.annotation             , k8s.annotation            , k8s.annotation            , map           ,                       , Custom Tag      , 111
-k8s.env                    , k8s.env                   , k8s.env                   , map           ,                       , Custom Tag      , 111
-cloud.tag                  , cloud.tag                 , cloud.tag                 , map           ,                       , Custom Tag      , 111
+k8s.label                  , k8s.label                 , k8s.label                 , map           ,                       , Custom Tag              , 111
+k8s.annotation             , k8s.annotation            , k8s.annotation            , map           ,                       , Custom Tag              , 111
+k8s.env                    , k8s.env                   , k8s.env                   , map           ,                       , Custom Tag              , 111
+cloud.tag                  , cloud.tag                 , cloud.tag                 , map           ,                       , Custom Tag              , 111
 
 ip                         , ip                        , ip                        , ip            ,                       , Network Layer   , 111
 is_ipv4                    , is_ipv4                   , is_ipv4                   , int_enum      , ip_type               , Network Layer   , 111
