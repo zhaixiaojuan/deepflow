@@ -47,8 +47,15 @@ type prometheusReader struct {
 func (p *prometheusReader) promReaderExecute(ctx context.Context, req *prompb.ReadRequest, debug bool) (resp *prompb.ReadResponse, querierSql, sql string, duration float64, err error) {
 	// promrequest trans to sql
 	// pp.Println(req)
+
+	// clear cache if data not found
 	var metricName string
 	var response *prompb.ReadResponse
+	defer func(r *prompb.ReadRequest) {
+		if response == nil || len(response.Results) == 0 {
+			cache.PromReadResponseCache().Remove(r)
+		}
+	}(req)
 	// var queryResult, result *common.Result
 	// should get cache result immediately
 	item, hit, metricName, storage_query_start, storage_query_end := cache.PromReadResponseCache().Get(req)
@@ -107,12 +114,11 @@ func (p *prometheusReader) promReaderExecute(ctx context.Context, req *prompb.Re
 		ctx = context.WithValue(ctx, "remote_read", true)
 	}
 	// if `api` pass `debug` or config debug, get debug info from querier
-	debugQuerier := debug || config.Cfg.Prometheus.RequestQueryWithDebug
 	args := common.QuerierParams{
 		DB:         db,
 		Sql:        querierSql,
 		DataSource: datasource,
-		Debug:      strconv.FormatBool(debugQuerier),
+		Debug:      strconv.FormatBool(debug),
 		QueryUUID:  query_uuid.String(),
 		Context:    ctx,
 	}
@@ -121,7 +127,7 @@ func (p *prometheusReader) promReaderExecute(ctx context.Context, req *prompb.Re
 
 	// start span trace query time of any query uuid
 	var span trace.Span
-	if config.Cfg.Prometheus.RequestQueryWithDebug {
+	if debug {
 		tr := otel.GetTracerProvider().Tracer("querier/prometheus/clickhouseQuery")
 		ctx, span = tr.Start(ctx, "PromReaderExecute",
 			trace.WithSpanKind(trace.SpanKindClient),
@@ -138,12 +144,10 @@ func (p *prometheusReader) promReaderExecute(ctx context.Context, req *prompb.Re
 		return nil, "", "", 0, err
 	}
 
-	if debugQuerier {
+	if debug {
 		duration = extractQueryTimeFromQueryResponse(debugInfo)
 		sql = extractQuerySQLFromQueryResponse(debugInfo)
-	}
 
-	if config.Cfg.Prometheus.RequestQueryWithDebug {
 		// inject query_time for current span
 		span.SetAttributes(attribute.Float64("query_time", duration))
 

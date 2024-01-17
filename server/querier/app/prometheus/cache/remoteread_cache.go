@@ -131,13 +131,16 @@ func (c *CacheItem) FixupQueryTime(start int64, end int64) (int64, int64) {
 	return start, end
 }
 
-func getSeriesLabels(lb *[]prompb.Label) string {
-	sort.Slice(*lb, func(i, j int) bool { return (*lb)[i].Name < (*lb)[j].Name })
-	labels := make([]string, 0, len(*lb))
-	for i := 0; i < len(*lb); i++ {
-		labels = append(labels, (*lb)[i].Name+":"+(*lb)[i].Value)
+func promLabelsEqual(a *[]prompb.Label, b *[]prompb.Label) bool {
+	if a == nil || b == nil || len(*a) != len(*b) {
+		return false
 	}
-	return strings.Join(labels, ",")
+	for i := 0; i < len(*a); i++ {
+		if (*a)[i].Name != (*b)[i].Name || (*a)[i].Value != (*b)[i].Value {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *CacheItem) mergeResponse(start, end int64, query *prompb.ReadResponse) *prompb.ReadResponse {
@@ -196,11 +199,8 @@ func (c *CacheItem) mergeResponse(start, end int64, query *prompb.ReadResponse) 
 	}
 
 	for _, ts := range queryTs {
-		labels := getSeriesLabels(&ts.Labels)
-
 		for _, existsTs := range cachedTs {
-			cachedLabels := getSeriesLabels(&existsTs.Labels)
-			if labels == cachedLabels {
+			if promLabelsEqual(&ts.Labels, &existsTs.Labels) {
 				existsSamples := existsTs.Samples
 				existsSamplesStart := existsSamples[0].Timestamp
 				existsSamplesEnd := existsSamples[len(existsSamples)-1].Timestamp
@@ -272,13 +272,16 @@ func NewRemoteReadQueryCache() *RemoteReadQueryCache {
 	return s
 }
 
-func (s *RemoteReadQueryCache) AddOrMerge(req *prompb.ReadRequest, query *prompb.ReadResponse) *prompb.ReadResponse {
+func (s *RemoteReadQueryCache) AddOrMerge(req *prompb.ReadRequest, resp *prompb.ReadResponse) *prompb.ReadResponse {
 	if req == nil || len(req.Queries) == 0 {
-		return query
+		return resp
+	}
+	if resp == nil || len(resp.Results) == 0 {
+		return resp
 	}
 	q := req.Queries[0]
 	if q.Hints.Func == "series" {
-		return query
+		return resp
 	}
 
 	key, _ := promRequestToCacheKey(q)
@@ -296,7 +299,7 @@ func (s *RemoteReadQueryCache) AddOrMerge(req *prompb.ReadRequest, query *prompb
 	}()
 
 	if !ok {
-		item = &CacheItem{startTime: start, endTime: end, data: query, rwLock: &sync.RWMutex{}}
+		item = &CacheItem{startTime: start, endTime: end, data: resp, rwLock: &sync.RWMutex{}}
 		s.cache.Add(key, item)
 	} else {
 		// cache hit, merge data
@@ -306,7 +309,7 @@ func (s *RemoteReadQueryCache) AddOrMerge(req *prompb.ReadRequest, query *prompb
 		item.rwLock.Lock()
 		defer item.rwLock.Unlock()
 
-		item.data = item.mergeResponse(start, end, query)
+		item.data = item.mergeResponse(start, end, resp)
 		d := time.Since(t1)
 		atomic.AddUint64(&s.counter.Stats.CacheMergeDuration, uint64(d.Seconds()))
 	}
@@ -336,6 +339,16 @@ func copyResponse(cached *prompb.ReadResponse) *prompb.ReadResponse {
 	}
 
 	return resp
+}
+
+func (s *RemoteReadQueryCache) Remove(req *prompb.ReadRequest) {
+	if req == nil || len(req.Queries) == 0 {
+		return
+	}
+	key, _ := promRequestToCacheKey(req.Queries[0])
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.cache.Remove(key)
 }
 
 func (s *RemoteReadQueryCache) Get(req *prompb.ReadRequest) (*prompb.ReadResponse, CacheHit, string, int64, int64) {

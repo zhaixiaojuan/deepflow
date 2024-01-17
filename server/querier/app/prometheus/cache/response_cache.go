@@ -19,7 +19,6 @@ package cache
 import (
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 	"unsafe"
 
@@ -270,12 +269,10 @@ func (c *Cacher) matrixMerge(resp promql.Matrix, cache *promql.Result) (promql.R
 	}
 	output := make(promql.Matrix, 0, len(cacheMatrix))
 	for _, cachedTs := range cacheMatrix {
-		cachedSeries := genSeriesLabelString(&cachedTs.Metric)
 		newSeries := promql.Series{Metric: cachedTs.Metric}
 		newSeries.Points = cachedTs.Points
 		for _, series := range resp {
-			respSeries := genSeriesLabelString(&series.Metric)
-			if respSeries == cachedSeries {
+			if labelsEqual(&cachedTs.Metric, &series.Metric) {
 				existsStartT := newSeries.Points[0].T
 				existsEndT := newSeries.Points[len(newSeries.Points)-1].T
 
@@ -315,12 +312,10 @@ func (c *Cacher) vectorMerge(resp promql.Vector, cached *promql.Result) (promql.
 	}
 	output := make(promql.Matrix, 0, len(cacheMatrix))
 	for _, cachedTs := range cacheMatrix {
-		cachedSeries := genSeriesLabelString(&cachedTs.Metric)
 		newSeries := promql.Series{Metric: cachedTs.Metric}
 		newSeries.Points = cachedTs.Points
 		for _, samples := range resp {
-			respSeries := genSeriesLabelString(&samples.Metric)
-			if respSeries == cachedSeries {
+			if labelsEqual(&cachedTs.Metric, &samples.Metric) {
 				insertedPointAt := sort.Search(len(newSeries.Points), func(i int) bool {
 					return newSeries.Points[i].T >= samples.Point.T
 				})
@@ -349,10 +344,14 @@ func vectorTomatrix(v *promql.Vector) promql.Matrix {
 	return output
 }
 
-func genSeriesLabelString(lb *labels.Labels) string {
-	lbs := make([]string, 0, len(*lb))
-	for i := 0; i < len(*lb); i++ {
-		lbs = append(lbs, fmt.Sprintf("%s=%s", (*lb)[i].Name, (*lb)[i].Value))
+func labelsEqual(a *labels.Labels, b *labels.Labels) bool {
+	if a == nil || b == nil || len(*a) != len(*b) {
+		return false
 	}
-	return strings.Join(lbs, ",")
+	for i := 0; i < len(*a); i++ {
+		if (*a)[i].Name != (*b)[i].Name || (*a)[i].Value != (*b)[i].Value {
+			return false
+		}
+	}
+	return true
 }

@@ -108,6 +108,7 @@ require (
 	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/pyroscope-io/pyroscope v0.37.1
 	go.opentelemetry.io/collector/pdata v1.0.0
+	go.uber.org/automaxprocs v1.5.3
 	golang.org/x/exp v0.0.0-20231226003508-02704c960a9b
 	skywalking.apache.org/repo/goapi v0.0.0-20230712035303-201c1fb2d6ec
 )

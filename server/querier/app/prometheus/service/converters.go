@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -95,6 +96,8 @@ var aggFunctions = map[string]string{
 	"count_values": view.FUNCTION_COUNT, // equals count() group by value in ck
 	"quantile":     "",                  // not supported, FIXME: should support histogram in querier, and calcul Pxx by histogram
 }
+
+var allowLabelIndexFuncs = []string{"sum", "avg", "count", "min", "max", "group", "stddev", "stdvar", "count_values", "quantile"}
 
 // define `showtag` flag, it passed when and only [api/v1/series] been called
 type CtxKeyShowTag struct{}
@@ -244,7 +247,7 @@ func (p *prometheusReader) promReaderTransToSQL(ctx context.Context, req *prompb
 		// append metricName `value`
 		metricsArray = append(metricsArray, metricAlias)
 		// append `tag` only for prometheus & ext_metrics & deepflow_system
-		if q.Hints.Func == "" || q.Hints.Func == "series" || q.Hints.Func == FUNCTION_TOPK || q.Hints.Func == FUNCTION_BOTTOMK || filterMatrixArgTypes(q.Hints.Func) {
+		if !common.IsValueInSliceString(q.Hints.Func, allowLabelIndexFuncs) {
 			// `tag` should be append into `Select` with:
 			// 1. not any aggregations, try get all `tag`
 			// 2. topk(n)/bottomk(n) get all `tag`
@@ -594,8 +597,11 @@ func (p *prometheusReader) respTransToProm(ctx context.Context, metricsName stri
 	sampleSeriesIndex := make([]int32, len(result.Values))          // the index in seriesArray, for each sample
 	seriesSampleCount := make([]int32, maxPossibleSeries)           // number of samples of each series
 	initialSeriesIndex := int32(0)
-
+	promJsonMap := make(map[string]map[string]string)
 	tagsStrList := make([]string, 0, len(allDeepFlowNativeTags))
+	promTagStrList := make([]string, 0)
+	promTagWriter := strings.Builder{}
+
 	for i, v := range result.Values {
 		values := v.([]interface{})
 		// don't append series if it's outside query time range
@@ -610,21 +616,35 @@ func (p *prometheusReader) respTransToProm(ctx context.Context, metricsName stri
 		// merge prometheus tags
 		if tagIndex > -1 {
 			promTagJson = values[tagIndex].(string)
-			tagMap := make(map[string]string)
-			json.Unmarshal([]byte(promTagJson), &tagMap)
-			filterTagMap = make(map[string]string, len(tagMap))
-			for k, v := range tagMap {
+			var ok bool
+			if filterTagMap, ok = promJsonMap[promTagJson]; !ok {
+				filterTagMap = make(map[string]string)
+				json.Unmarshal([]byte(promTagJson), &filterTagMap)
+			}
+			if cap(promTagStrList) < len(filterTagMap) {
+				promTagStrList = make([]string, 0, len(filterTagMap))
+			}
+			for k, v := range filterTagMap {
 				if k == "" || v == "" {
 					continue
 				}
 				// ignore replica labels if passed
 				if config.Cfg.Prometheus.ThanosReplicaLabels != nil && common.IsValueInSliceString(k, config.Cfg.Prometheus.ThanosReplicaLabels) {
+					filterTagMap[k] = ""
 					continue
 				}
 				filterTagMap[k] = v
+				promTagStrList = append(promTagStrList, k)
 			}
-			promFilterTagJson, _ := json.Marshal(filterTagMap)
-			deepflowNativeTagString = string(promFilterTagJson)
+			promJsonMap[promTagJson] = filterTagMap
+			sort.Strings(promTagStrList)
+			for i := 0; i < len(promTagStrList); i++ {
+				promTagWriter.WriteString(promTagStrList[i])
+				promTagWriter.WriteString(filterTagMap[promTagStrList[i]])
+			}
+			deepflowNativeTagString = promTagWriter.String()
+			promTagWriter.Reset()
+			promTagStrList = promTagStrList[:0]
 		} else if labelsIndex > -1 {
 			labelsArray, ok := values[labelsIndex].([]uint32)
 			if !ok {
@@ -632,42 +652,37 @@ func (p *prometheusReader) respTransToProm(ctx context.Context, metricsName stri
 				continue
 			}
 			labelString := strings.Builder{}
-			for j, labelidx := range labelsArray {
+			for j := 0; j < len(labelsArray); j++ {
 				labelString.WriteString(strconv.Itoa(j))
-				labelString.WriteString(strconv.Itoa(int(labelidx)))
+				labelString.WriteString(strconv.Itoa(int(labelsArray[j])))
 			}
 			deepflowNativeTagString = labelString.String()
 			filterTagMap = make(map[string]string, len(tagsFieldIndex)+1)
 			filterTagMap[PROMETHEUS_LABELS_INDEX] = deepflowNativeTagString
+			// agg prometheus query, directly get tag.x
+			for idx := range tagsFieldIndex {
+				name := removePrometheusTagPrefix(result.Columns[idx].(string))
+				val := values[idx].(string)
 
-			if len(tagsFieldIndex) > 0 {
-				// agg prometheus query, directly get tag.x
-				for idx := range tagsFieldIndex {
-					name := removePrometheusTagPrefix(result.Columns[idx].(string))
-					val := values[idx].(string)
-
-					if name == "" || val == "" {
-						continue
-					}
-					// ignore replica labels if passed
-					if config.Cfg.Prometheus.ThanosReplicaLabels != nil && common.IsValueInSliceString(name, config.Cfg.Prometheus.ThanosReplicaLabels) {
-						continue
-					}
-					filterTagMap[name] = val
+				if name == "" || val == "" {
+					continue
 				}
+				// ignore replica labels if passed
+				if config.Cfg.Prometheus.ThanosReplicaLabels != nil && common.IsValueInSliceString(name, config.Cfg.Prometheus.ThanosReplicaLabels) {
+					continue
+				}
+				filterTagMap[name] = val
 			}
 		} else {
 			// if tagIndex = -1 and len(tagsFieldIndex) = 0, append metric name
-			filterTagMap = map[string]string{PROMETHEUS_METRICS_NAME: metricsName}
-			promFilterTagJson, _ := json.Marshal(filterTagMap)
-			deepflowNativeTagString = string(promFilterTagJson)
+			deepflowNativeTagString = fmt.Sprintf("%s:%s", PROMETHEUS_METRICS_NAME, metricsName)
 		}
 
 		// merge deepflow autotagging tags
 		if len(allDeepFlowNativeTags) > 0 {
-			for _, idx := range allDeepFlowNativeTags {
-				tagsStrList = append(tagsStrList, strconv.Itoa(idx))
-				tagsStrList = append(tagsStrList, getValue(values[idx]))
+			for i := 0; i < len(allDeepFlowNativeTags); i++ {
+				tagsStrList = append(tagsStrList, strconv.Itoa(allDeepFlowNativeTags[i]))
+				tagsStrList = append(tagsStrList, getValue(values[allDeepFlowNativeTags[i]]))
 			}
 			deepflowNativeTagString += strings.Join(tagsStrList, "-")
 			tagsStrList = tagsStrList[:0]
@@ -690,18 +705,15 @@ func (p *prometheusReader) respTransToProm(ctx context.Context, metricsName stri
 			if len(filterTagMap) > 0 { // has any prometheus tag
 				pairs = make([]prompb.Label, 0, 1+len(filterTagMap)+len(allDeepFlowNativeTags))
 				for k, v := range filterTagMap {
+					if v == "" {
+						continue
+					}
 					if prefix == prefixTag {
 						// prometheus tag for deepflow metrics
-						pairs = append(pairs, prompb.Label{
-							Name:  appendPrometheusPrefix(k),
-							Value: v,
-						})
+						pairs = append(pairs, prompb.Label{Name: appendPrometheusPrefix(k), Value: v})
 					} else {
 						// no prefix, use prometheus native tag
-						pairs = append(pairs, prompb.Label{
-							Name:  k,
-							Value: v,
-						})
+						pairs = append(pairs, prompb.Label{Name: k, Value: v})
 					}
 				}
 
@@ -716,21 +728,13 @@ func (p *prometheusReader) respTransToProm(ctx context.Context, metricsName stri
 				if isZero(values[idx]) {
 					continue
 				}
+				formatTag := formatTagName(result.Columns[idx].(string))
+				p.addExternalTagCache(formatTag, result.Columns[idx].(string))
 				if (len(filterTagMap) > 0) && prefix == prefixDeepFlow {
 					// deepflow tag for prometheus metrics
-					formatTag := formatTagName(result.Columns[idx].(string))
-					pairs = append(pairs, prompb.Label{
-						Name:  appendDeepFlowPrefix(extractEnumTag(formatTag)),
-						Value: getValue(values[idx]),
-					})
-					p.addExternalTagCache(formatTag, result.Columns[idx].(string))
+					pairs = append(pairs, prompb.Label{Name: appendDeepFlowPrefix(extractEnumTag(formatTag)), Value: getValue(values[idx])})
 				} else {
-					formatTag := formatTagName(result.Columns[idx].(string))
-					pairs = append(pairs, prompb.Label{
-						Name:  extractEnumTag(formatTag),
-						Value: getValue(values[idx]),
-					})
-					p.addExternalTagCache(formatTag, result.Columns[idx].(string))
+					pairs = append(pairs, prompb.Label{Name: extractEnumTag(formatTag), Value: getValue(values[idx])})
 				}
 			}
 
@@ -740,10 +744,7 @@ func (p *prometheusReader) respTransToProm(ctx context.Context, metricsName stri
 			}
 			// avoid duplicated __name__ label
 			if filterTagMap[PROMETHEUS_METRICS_NAME] == "" {
-				pairs = append(pairs, prompb.Label{
-					Name:  PROMETHEUS_METRICS_NAME,
-					Value: metricsName,
-				})
+				pairs = append(pairs, prompb.Label{Name: PROMETHEUS_METRICS_NAME, Value: metricsName})
 			}
 			series = &prompb.TimeSeries{Labels: pairs}
 			seriesArray = append(seriesArray, series)
@@ -960,17 +961,6 @@ func (p *prometheusReader) parseQueryRequestToSQL(ctx context.Context, queryReq 
 	groupBy = append(groupBy, PROMETHEUS_TIME_COLUMNS)
 	sql := parseToQuerierSQL(ctx, chCommon.DB_NAME_PROMETHEUS, queryReq.GetMetric(), selection, filters, groupBy, orderBy)
 	return sql
-}
-
-func filterMatrixArgTypes(f string) bool {
-	if fc, ok := parser.Functions[f]; ok {
-		for _, t := range fc.ArgTypes {
-			if t == parser.ValueTypeMatrix {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func parseMatcherType(t labels.MatchType) prompb.LabelMatcher_Type {

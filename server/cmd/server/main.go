@@ -39,6 +39,7 @@ import (
 	"github.com/deepflowio/deepflow/server/querier/querier"
 
 	logging "github.com/op/go-logging"
+	_ "go.uber.org/automaxprocs"
 )
 
 func execName() string {
