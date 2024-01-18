@@ -55,7 +55,7 @@ func (ln *target) getID(key cache.TargetKey) (int, bool) {
 	return 0, false
 }
 
-func (ln *target) refresh(args ...interface{}) error {
+func (ln *target) refresh() error {
 	ln.lock.Lock()
 	defer ln.lock.Unlock()
 

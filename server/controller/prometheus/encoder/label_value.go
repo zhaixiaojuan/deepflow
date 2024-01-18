@@ -37,7 +37,7 @@ func newLabelValue() *labelValue {
 	}
 }
 
-func (lv *labelValue) refresh(args ...interface{}) error {
+func (lv *labelValue) refresh() error {
 	var items []*mysql.PrometheusLabelValue
 	err := mysql.Db.Unscoped().Find(&items).Error
 	if err != nil {

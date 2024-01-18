@@ -170,7 +170,7 @@ func (t *target) GetTargetIDToLabelNames() map[int]mapset.Set[string] {
 	return t.targetIDToLabelNames.Get()
 }
 
-func (t *target) refresh(args ...interface{}) error {
+func (t *target) refresh() error {
 	recorderTargets, selfTargets, err := t.load()
 	if err != nil {
 		return err

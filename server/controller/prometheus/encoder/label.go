@@ -58,7 +58,7 @@ func (l *label) getID(key cache.LabelKey) (int, bool) {
 	return 0, false
 }
 
-func (l *label) refresh(args ...interface{}) error {
+func (l *label) refresh() error {
 	var items []*mysql.PrometheusLabel
 	err := mysql.Db.Find(&items).Error
 	if err != nil {
