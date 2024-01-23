@@ -50,8 +50,10 @@ func (h *Host) getDiffBaseByCloudItem(cloudItem *cloudmodel.Host) (diffBase *dif
 
 func (h *Host) generateDBItemToAdd(cloudItem *cloudmodel.Host) (*mysql.Host, bool) {
 	dbItem := &mysql.Host{
-		Name:       cloudItem.Name,
-		IP:         cloudItem.IP,
+		Name: cloudItem.Name,
+		IP:   cloudItem.IP,
+		// TODO(weiqiang): add hostname
+		Hostname:   "",
 		Type:       cloudItem.Type,
 		HType:      cloudItem.HType,
 		VCPUNum:    cloudItem.VCPUNum,
@@ -75,6 +77,10 @@ func (h *Host) generateUpdateInfo(diffBase *diffbase.Host, cloudItem *cloudmodel
 	}
 	if diffBase.IP != cloudItem.IP {
 		updateInfo["ip"] = cloudItem.IP
+	}
+	// TODO(weiqiang): add hostname
+	if diffBase.Hostname != "" {
+		updateInfo["hostname"] = ""
 	}
 	if diffBase.HType != cloudItem.HType {
 		updateInfo["htype"] = cloudItem.HType

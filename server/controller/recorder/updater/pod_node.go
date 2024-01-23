@@ -66,13 +66,15 @@ func (n *PodNode) generateDBItemToAdd(cloudItem *cloudmodel.PodNode) (*mysql.Pod
 		return nil, false
 	}
 	dbItem := &mysql.PodNode{
-		Name:         cloudItem.Name,
-		Type:         cloudItem.Type,
-		MemTotal:     cloudItem.MemTotal,
-		VCPUNum:      cloudItem.VCPUNum,
-		ServerType:   cloudItem.ServerType,
-		State:        cloudItem.State,
-		IP:           cloudItem.IP,
+		Name:       cloudItem.Name,
+		Type:       cloudItem.Type,
+		MemTotal:   cloudItem.MemTotal,
+		VCPUNum:    cloudItem.VCPUNum,
+		ServerType: cloudItem.ServerType,
+		State:      cloudItem.State,
+		IP:         cloudItem.IP,
+		// TODO(weiqiang): add hostname
+		Hostname:     "",
 		PodClusterID: podClusterID,
 		SubDomain:    cloudItem.SubDomainLcuuid,
 		Domain:       n.cache.DomainLcuuid,
@@ -88,6 +90,9 @@ func (n *PodNode) generateUpdateInfo(diffBase *diffbase.PodNode, cloudItem *clou
 	updateInfo := make(map[string]interface{})
 	if diffBase.Type != cloudItem.Type {
 		updateInfo["type"] = cloudItem.Type
+	}
+	if diffBase.Hostname != "" {
+		updateInfo["hostname"] = ""
 	}
 	if diffBase.State != cloudItem.State {
 		updateInfo["state"] = cloudItem.State
